@@ -210,42 +210,6 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated }) => {
                       ))}
                     </div>
                   </div>
-
-                  {/* Thời gian Start */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-300">
-                      Thời gian bắt đầu
-                    </label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Calendar className="h-5 w-5 text-gray-500 group-focus-within:text-[#34d399]" />
-                      </div>
-                      <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full bg-[#0b1411] border border-[#2d4a3e] rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] transition-all [color-scheme:dark]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Thời gian End */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-300">
-                      Thời gian kết thúc
-                    </label>
-                    <div className="relative group">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Calendar className="h-5 w-5 text-gray-500 group-focus-within:text-[#34d399]" />
-                      </div>
-                      <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="w-full bg-[#0b1411] border border-[#2d4a3e] rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] transition-all [color-scheme:dark]"
-                      />
-                    </div>
-                  </div>
                 </div>
               </div>
 

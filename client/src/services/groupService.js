@@ -82,6 +82,33 @@ const groupService = {
       return { ok: false, data: { message: "Lỗi kết nối" } };
     }
   },
+  getGroupSettings: async (groupId) => {
+    try {
+      const res = await fetch(`${API_URL}/groups/${groupId}/settings`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối" } };
+    }
+  },
+
+  updateGroup: async (groupId, formData) => {
+    try {
+      const res = await fetch(`${API_URL}/groups/${groupId}`, {
+        method: "PUT",
+        credentials: "include",
+        body: formData,
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối" } };
+    }
+  },
 };
 
 export default groupService;

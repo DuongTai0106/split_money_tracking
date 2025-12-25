@@ -1,112 +1,139 @@
-// src/pages/GroupSettings.jsx
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Save } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import toast from "react-hot-toast";
+import groupService from "../services/groupService";
 
 // Components
 import InfoSection from "../components/group-settings/InfoSection";
 import MemberSection from "../components/group-settings/MemberSection";
 import DangerZone from "../components/group-settings/DangerZone";
 
-// Mock Data
-const MOCK_SETTINGS = {
-  name: "Trip to Da Lat",
-  image:
-    "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&auto=format&fit=crop",
-  members: [
-    {
-      id: 1,
-      name: "Bạn (Minh)",
-      email: "039 888 ****",
-      role: "owner",
-      avatar: "https://ui-avatars.com/api/?name=Minh",
-      isMe: true,
-    },
-    {
-      id: 2,
-      name: "Tuấn",
-      email: "tuannguyen@gmail.com",
-      role: "admin",
-      avatar: "https://ui-avatars.com/api/?name=Tuan",
-      isMe: false,
-    },
-    {
-      id: 3,
-      name: "Linh",
-      email: "Member",
-      role: "member",
-      avatar: "https://ui-avatars.com/api/?name=Linh",
-      isMe: false,
-    },
-    {
-      id: 4,
-      name: "Hùng",
-      email: "Member",
-      role: "member",
-      avatar: "https://ui-avatars.com/api/?name=Hung",
-      isMe: false,
-    },
-  ],
-};
-
 const GroupSettings = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [groupInfo, setGroupInfo] = useState(MOCK_SETTINGS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    // Call API save here
-    console.log("Saving...", groupInfo);
-    navigate(-1); // Quay lại trang trước
+  // State lưu toàn bộ thông tin settings
+  const [groupInfo, setGroupInfo] = useState({
+    name: "",
+    image: "",
+    currency: "VND",
+    start_date: "",
+    end_date: "",
+    invite_code: "",
+    members: [],
+  });
+
+  // State riêng cho file ảnh mới (nếu user đổi ảnh)
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const res = await groupService.getGroupSettings(id);
+      if (res.ok && res.data.success) {
+        const data = res.data.data;
+        // Format date để hiện lên input type="date"
+        setGroupInfo({
+          ...data,
+          start_date: data.start_date ? data.start_date.split("T")[0] : "",
+          end_date: data.end_date ? data.end_date.split("T")[0] : "",
+        });
+      } else {
+        toast.error("Không thể tải cài đặt nhóm");
+        navigate(-1);
+      }
+      setLoading(false);
+    };
+    fetchSettings();
+  }, [id, navigate]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append("name", groupInfo.name);
+      formData.append("currency", groupInfo.currency);
+      formData.append("start_date", groupInfo.start_date);
+      formData.append("end_date", groupInfo.end_date);
+
+      if (selectedFile) {
+        formData.append("groupImage", selectedFile);
+      }
+
+      const res = await groupService.updateGroup(id, formData);
+      if (res.ok && res.data.success) {
+        toast.success("Cập nhật thành công!");
+        // Cập nhật lại state nếu có ảnh mới trả về từ server
+        if (res.data.image) {
+          setGroupInfo((prev) => ({ ...prev, image: res.data.image }));
+        }
+        navigate(-1);
+      } else {
+        toast.error("Cập nhật thất bại");
+      }
+    } catch (error) {
+      toast.error("Lỗi hệ thống");
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading)
+    return (
+      <div className="min-h-screen bg-[#0b1411] flex items-center justify-center text-[#34d399]">
+        <Loader2 className="animate-spin" size={32} />
+      </div>
+    );
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
       className="min-h-screen bg-[#0b1411] text-white font-sans pb-10"
     >
-      {/* HEADER (Sticky) */}
+      {/* HEADER */}
       <div className="sticky top-0 z-30 bg-[#0b1411]/90 backdrop-blur border-b border-[#1c2e26] px-4 py-4 flex items-center justify-between">
         <button
           onClick={() => navigate(-1)}
-          className="p-2 -ml-2 rounded-full hover:bg-[#1c2e26] transition-colors text-gray-300"
+          className="p-2 -ml-2 rounded-full hover:bg-[#1c2e26] text-gray-300"
         >
           <ArrowLeft size={22} />
         </button>
         <h1 className="text-lg font-bold">Cài đặt Nhóm</h1>
         <button
           onClick={handleSave}
-          className="text-[#34d399] font-bold text-sm hover:underline px-2"
+          disabled={saving}
+          className="text-[#34d399] font-bold text-sm hover:underline px-2 flex items-center gap-2"
         >
+          {saving && <Loader2 size={14} className="animate-spin" />}
           Lưu
         </button>
       </div>
 
       <div className="max-w-6xl mx-auto p-4 lg:p-8">
-        {/* LAYOUT GRID:
-             Mobile: 1 cột
-             Desktop: 2 cột (Trái: Info 40% - Phải: Members 60%)
-          */}
         <div className="flex flex-col lg:grid lg:grid-cols-12 gap-6 lg:gap-10">
-          {/* LEFT COLUMN (Info & Danger) */}
+          {/* LEFT: INFO */}
           <div className="lg:col-span-5 space-y-6 lg:space-y-8">
-            <InfoSection groupInfo={groupInfo} setGroupInfo={setGroupInfo} />
-
-            {/* Danger Zone: Ở desktop thì để dưới Info luôn cho tiện */}
+            <InfoSection
+              groupInfo={groupInfo}
+              setGroupInfo={setGroupInfo}
+              setSelectedFile={setSelectedFile} // Truyền setter xuống để lấy file
+            />
             <div className="hidden lg:block">
               <DangerZone />
             </div>
           </div>
 
-          {/* RIGHT COLUMN (Members) */}
+          {/* RIGHT: MEMBERS & INVITE */}
           <div className="lg:col-span-7 space-y-6">
-            <MemberSection members={groupInfo.members} />
-
-            {/* Danger Zone: Ở mobile thì để cuối cùng */}
+            <MemberSection
+              members={groupInfo.members}
+              inviteCode={groupInfo.invite_code}
+              groupName={groupInfo.name}
+            />
             <div className="lg:hidden pt-4">
               <DangerZone />
             </div>

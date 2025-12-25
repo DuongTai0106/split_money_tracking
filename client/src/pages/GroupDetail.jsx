@@ -65,7 +65,7 @@ const GroupDetail = () => {
       {/* HEADER NAVIGATION */}
       <div className="sticky top-0 z-30 bg-[#0b1411]/80 backdrop-blur-md border-b border-[#1c2e26] px-4 py-3 flex justify-between items-center">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate(`/groups`)}
           className="p-2 -ml-2 rounded-full hover:bg-[#1c2e26] transition-colors"
         >
           <ArrowLeft size={22} className="text-gray-300" />

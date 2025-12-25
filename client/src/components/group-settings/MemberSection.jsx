@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Link2,
   QrCode,
@@ -6,7 +6,11 @@ import {
   MoreVertical,
   Shield,
   Crown,
+  Copy,
+  Check,
 } from "lucide-react";
+import { QRModal } from "../modals/QRModal";
+import toast from "react-hot-toast";
 
 const MemberItem = ({ member }) => (
   <div className="flex items-center justify-between p-3 rounded-xl hover:bg-[#0b1411] transition-colors group">
@@ -57,66 +61,104 @@ const MemberItem = ({ member }) => (
   </div>
 );
 
-const MemberSection = ({ members }) => {
+const MemberSection = ({ members, inviteCode, groupName }) => {
+  const [showQR, setShowQR] = useState(false);
+
+  // Link mời giả định (Deep link hoặc Web link)
+  const inviteLink = `${window.location.origin}/join/${inviteCode}`;
+
+  const handleCopy = (text, type) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`Đã sao chép ${type}`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">
           Thành viên ({members.length})
         </h3>
-        <button className="text-[#34d399] text-sm font-bold hover:underline">
-          Quản lý
-        </button>
       </div>
 
       {/* Invite Buttons Grid */}
       <div className="grid grid-cols-3 gap-3">
-        {[
-          {
-            icon: Link2,
-            label: "Link mời",
-            color: "text-blue-400",
-            bg: "bg-blue-400/10",
-          },
-          {
-            icon: QrCode,
-            label: "QR Code",
-            color: "text-purple-400",
-            bg: "bg-purple-400/10",
-          },
-          {
-            icon: Grid3X3,
-            label: "Mã Code",
-            color: "text-orange-400",
-            bg: "bg-orange-400/10",
-          },
-        ].map((btn, idx) => (
-          <button
-            key={idx}
-            className="flex flex-col items-center justify-center gap-2 bg-[#1c2e26] p-4 rounded-2xl border border-[#2d4a3e] hover:border-[#34d399]/50 hover:bg-[#233930] transition-all group"
-          >
-            <div
-              className={`p-3 rounded-xl ${btn.bg} ${btn.color} group-hover:scale-110 transition-transform`}
-            >
-              <btn.icon size={20} />
-            </div>
-            <span className="text-xs font-medium text-gray-300">
-              {btn.label}
-            </span>
-          </button>
-        ))}
+        {/* Button 1: Copy Link */}
+        <button
+          onClick={() => handleCopy(inviteLink, "Link mời")}
+          className="flex flex-col items-center justify-center gap-2 bg-[#1c2e26] p-4 rounded-2xl border border-[#2d4a3e] hover:bg-[#233930] transition-all group"
+        >
+          <div className="p-3 rounded-xl bg-blue-400/10 text-blue-400 group-hover:scale-110 transition-transform">
+            <Link2 size={20} />
+          </div>
+          <span className="text-xs font-medium text-gray-300">Copy Link</span>
+        </button>
+
+        {/* Button 2: Show QR */}
+        <button
+          onClick={() => setShowQR(true)}
+          className="flex flex-col items-center justify-center gap-2 bg-[#1c2e26] p-4 rounded-2xl border border-[#2d4a3e] hover:bg-[#233930] transition-all group"
+        >
+          <div className="p-3 rounded-xl bg-purple-400/10 text-purple-400 group-hover:scale-110 transition-transform">
+            <QrCode size={20} />
+          </div>
+          <span className="text-xs font-medium text-gray-300">Mã QR</span>
+        </button>
+
+        {/* Button 3: Copy Code */}
+        <button
+          onClick={() => handleCopy(inviteCode, "Mã tham gia")}
+          className="flex flex-col items-center justify-center gap-2 bg-[#1c2e26] p-4 rounded-2xl border border-[#2d4a3e] hover:bg-[#233930] transition-all group"
+        >
+          <div className="p-3 rounded-xl bg-orange-400/10 text-orange-400 group-hover:scale-110 transition-transform">
+            <Grid3X3 size={20} />
+          </div>
+          <span className="text-xs font-medium text-gray-300">
+            {inviteCode || "..."}
+          </span>
+        </button>
       </div>
 
       {/* Member List */}
-      <div className="bg-[#1c2e26] rounded-2xl p-4 border border-[#2d4a3e] space-y-1">
+      <div className="bg-[#1c2e26] rounded-2xl p-4 border border-[#2d4a3e] space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar">
         {members.map((member) => (
-          <MemberItem key={member.id} member={member} />
+          // Component MemberItem cũ của bạn
+          <div
+            key={member.id}
+            className="flex items-center justify-between p-3 rounded-xl hover:bg-[#0b1411] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <img
+                src={
+                  member.avatar ||
+                  `https://ui-avatars.com/api/?name=${member.name}`
+                }
+                className="w-10 h-10 rounded-full border border-[#2d4a3e]"
+                alt={member.name}
+              />
+              <div>
+                <h4
+                  className={`font-bold text-sm ${
+                    member.isMe ? "text-[#34d399]" : "text-white"
+                  }`}
+                >
+                  {member.name} {member.isMe && "(Bạn)"}
+                </h4>
+                <p className="text-xs text-gray-500 capitalize">
+                  {member.role}
+                </p>
+              </div>
+            </div>
+          </div>
         ))}
-
-        <button className="w-full py-3 mt-2 text-sm text-gray-500 font-medium hover:text-[#34d399] border-t border-[#2d4a3e] transition-colors">
-          Xem tất cả thành viên
-        </button>
       </div>
+      {/* QR Modal */}
+      <QRModal
+        isOpen={showQR}
+        onClose={() => setShowQR(false)}
+        value={inviteLink}
+        title="Mã QR Tham Gia"
+        groupName={groupName}
+      />
     </div>
   );
 };

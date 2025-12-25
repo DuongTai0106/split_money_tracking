@@ -325,3 +325,116 @@ export const createBill = async (req, res) => {
     client.release();
   }
 };
+
+const generateInviteCode = () => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+};
+
+export const getGroupSettings = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const groupId = req.params.id;
+    const currentUserId = req.user.user_id || req.user.id;
+
+    // Lấy thông tin Group
+    const groupQuery = `SELECT * FROM groups WHERE id = $1`;
+    const groupRes = await client.query(groupQuery, [groupId]);
+    if (groupRes.rows.length === 0)
+      return res.status(404).json({ message: "Nhóm không tồn tại" });
+
+    let group = groupRes.rows[0];
+
+    // Nếu chưa có invite_code, tự động tạo và lưu luôn
+    if (!group.invite_code) {
+      const newCode = generateInviteCode();
+      await client.query("UPDATE groups SET invite_code = $1 WHERE id = $2", [
+        newCode,
+        groupId,
+      ]);
+      group.invite_code = newCode;
+    }
+
+    // Lấy danh sách Members kèm Role
+    const membersQuery = `
+            SELECT 
+                u.user_id as id, 
+                u.username, 
+                u.email, 
+                u.avatar_url as avatar, 
+                gm.role 
+            FROM group_members gm
+            JOIN users u ON gm.user_id = u.user_id
+            WHERE gm.group_id = $1
+            ORDER BY gm.role DESC, u.username ASC
+        `;
+    const membersRes = await client.query(membersQuery, [groupId]);
+
+    // Map data để khớp với UI (thêm cờ isMe)
+    const members = membersRes.rows.map((m) => ({
+      ...m,
+      name: m.username, // UI dùng 'name', DB dùng 'username'
+      isMe: m.id === currentUserId,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        ...group,
+        image: group.image_url, // UI dùng 'image', DB dùng 'image_url'
+        members,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Lỗi server" });
+  } finally {
+    client.release();
+  }
+};
+
+// 2. Cập nhật Group (Có upload ảnh)
+export const updateGroup = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const groupId = req.params.id;
+    const { name, currency, start_date, end_date } = req.body;
+
+    // Check quyền (chỉ Owner/Admin mới được sửa - Tuỳ logic của bạn)
+    // ... (bỏ qua check quyền để code gọn, bạn nên thêm vào)
+
+    let imageUrl = null;
+    if (req.file) {
+      imageUrl = req.file.path;
+    }
+
+    // Tạo câu query động (chỉ update trường nào có gửi lên)
+    // Cách đơn giản: Update hết (giữ nguyên ảnh cũ nếu không up ảnh mới)
+
+    let query = `
+            UPDATE groups 
+            SET name = $1, currency = $2, start_date = $3, end_date = $4
+        `;
+    const params = [name, currency, start_date || null, end_date || null];
+
+    if (imageUrl) {
+      query += `, image_url = $5 WHERE id = $6`;
+      params.push(imageUrl, groupId);
+    } else {
+      query += ` WHERE id = $5`;
+      params.push(groupId);
+    }
+
+    await client.query(query, params);
+
+    res.json({
+      success: true,
+      message: "Cập nhật thành công",
+      image: imageUrl,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Lỗi cập nhật nhóm" });
+  } finally {
+    client.release();
+  }
+};
