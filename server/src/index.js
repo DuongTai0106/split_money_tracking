@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.js";
+import groupRoutes from "./routes/groupRoutes.js"
 
 dotenv.config();
 
@@ -21,7 +22,7 @@ app.use(express.json());
 
 // Routes
 app.use("/auth", authRoutes);
-
+app.use("/groups", groupRoutes);
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

@@ -1,10 +1,9 @@
-const API_URL = "http://localhost:5000/auth";
-
+const API_URL = import.meta.env.VITE_API_URL;
 const authService = {
   // Hàm gọi API check session
   checkAuth: async () => {
     try {
-      const res = await fetch(`${API_URL}/me`, {
+      const res = await fetch(`${API_URL}/auth/me`, {
         method: "GET",
         credentials: "include", // <--- QUAN TRỌNG: Gửi kèm cookie
       });
@@ -16,7 +15,7 @@ const authService = {
   },
   login: async (email, password) => {
     try {
-      const res = await fetch(`${API_URL}/login`, {
+      const res = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -31,7 +30,7 @@ const authService = {
 
   register: async (username, email, password) => {
     try {
-      const res = await fetch(`${API_URL}/register`, {
+      const res = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -46,7 +45,7 @@ const authService = {
 
   initRegister: async (username, email) => {
     try {
-      const res = await fetch(`${API_URL}/register-init`, {
+      const res = await fetch(`${API_URL}/auth/register-init`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, email }),
@@ -60,7 +59,7 @@ const authService = {
 
   completeRegister: async (username, email, password, otp) => {
     try {
-      const res = await fetch(`${API_URL}/register-complete`, {
+      const res = await fetch(`${API_URL}/auth/register-complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // Quan trọng để nhận Cookie đăng nhập luôn
@@ -74,7 +73,7 @@ const authService = {
   },
 
   logout: async () => {
-    await fetch(`${API_URL}/logout`, {
+    await fetch(`${API_URL}/auth/logout`, {
       method: "POST",
       credentials: "include",
     });
@@ -82,7 +81,7 @@ const authService = {
 
   forgotPassword: async (email) => {
     try {
-      const res = await fetch(`${API_URL}/forgot-password`, {
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -96,7 +95,7 @@ const authService = {
 
   verifyOtp: async (email, otp) => {
     try {
-      const res = await fetch(`${API_URL}/verify-otp`, {
+      const res = await fetch(`${API_URL}/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp }),
@@ -110,7 +109,7 @@ const authService = {
 
   resetPassword: async (email, otp, newPassword) => {
     try {
-      const res = await fetch(`${API_URL}/reset-password`, {
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp, newPassword }),
@@ -122,6 +121,5 @@ const authService = {
     }
   },
 };
-
 
 export default authService;

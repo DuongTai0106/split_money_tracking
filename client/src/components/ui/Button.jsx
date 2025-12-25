@@ -14,7 +14,7 @@ const Button = ({
 
   const variants = {
     primary:
-      "text-white bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 focus:ring-indigo-500 shadow-indigo-500/30",
+      "text-white bg-gradient-to-r from-green-500 to-green-400 hover:from-green-600 hover:to-green-600 focus:ring-green-400 shadow-green-400/30",
     outline:
       "text-gray-700 bg-white border-gray-300 hover:bg-gray-50 focus:ring-gray-200",
   };

@@ -17,11 +17,13 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import PublicOnlyRoute from "./components/PublicOnlyRoute";
+import Home from "./pages/Home";
 
-// --- NEW IMPORTS (Các component mới chúng ta vừa làm) ---
-import MainLayout from "./components/layout/MainLayout";
-import GroupsList from "./pages/GroupsList";
+// --- NEW IMPORT ---
+// Import LayoutWrapper mới thay vì MainLayout cũ
+import LayoutWrapper from "./components/layout/LayoutWrapper";
 import GroupDetail from "./pages/GroupDetail";
+import GroupSettings from "./pages/GroupSettings";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -38,20 +40,33 @@ function App() {
     checkSession();
   }, []);
 
-  // Màn hình chờ khi đang check cookie
+  const handleLogout = async () => {
+    await authService.logout(); // Gọi service logout (nếu có)
+    setUser(null);
+  };
+
   if (isChecking) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+      <div className="h-screen w-screen flex items-center justify-center bg-[#0b1411]">
+        <Loader2 className="h-10 w-10 animate-spin text-[#34d399]" />
       </div>
     );
   }
 
   return (
     <Router>
-      <Toaster position="top-center" />
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: "#1c2e26",
+            color: "#fff",
+            border: "1px solid #2d4a3e",
+          },
+        }}
+      />
       <Routes>
-        {/* --- PUBLIC ROUTES (Chỉ cho khách chưa đăng nhập) --- */}
+        {/* --- PUBLIC ROUTES --- */}
         <Route
           path="/"
           element={
@@ -77,22 +92,29 @@ function App() {
           }
         />
 
-        {/* --- PROTECTED ROUTES (Phải đăng nhập mới vào được) --- */}
+        {/* --- PROTECTED ROUTES --- */}
         {user ? (
-          /* Sử dụng MainLayout làm khung sườn chung cho các trang bên trong */
-          <Route element={<MainLayout onLogout={() => setUser(null)} />}>
-            {/* Trang chủ mặc định sau khi login là danh sách nhóm */}
-            <Route path="/groups" element={<GroupsList />} />
+          <>
+            {/* NHÓM 1: CÓ SIDEBAR (LayoutWrapper) */}
+            {/* Dành cho các trang cấp 1: Trang chủ, Danh sách nhóm, Profile, Setting */}
+            <Route
+              element={<LayoutWrapper user={user} onLogout={handleLogout} />}
+            >
+              <Route path="/groups" element={<Home user={user} />} />
+              {/* Nếu sau này có trang /profile thì thêm vào đây */}
+            </Route>
 
-            {/* Trang chi tiết từng nhóm */}
+            {/* NHÓM 2: KHÔNG SIDEBAR (Full Screen) */}
+            {/* Dành cho các trang chi tiết cần không gian rộng */}
             <Route path="/groups/:id" element={<GroupDetail />} />
+            <Route path="/groups/:id/settings" element={<GroupSettings />} />
 
-            {/* Redirect các đường dẫn cũ hoặc sai về trang groups */}
+            {/* Redirects */}
             <Route path="/home" element={<Navigate to="/groups" replace />} />
             <Route path="*" element={<Navigate to="/groups" replace />} />
-          </Route>
+          </>
         ) : (
-          /* Nếu chưa đăng nhập mà cố truy cập lung tung -> Đá về Login */
+          /* Chưa login thì đá về trang chủ (Login) */
           <Route path="*" element={<Navigate to="/" replace />} />
         )}
       </Routes>

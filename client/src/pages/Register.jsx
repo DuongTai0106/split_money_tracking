@@ -185,7 +185,7 @@ const Register = () => {
                 Đã có tài khoản?{" "}
                 <Link
                   to="/"
-                  className="font-semibold text-indigo-600 hover:text-indigo-500"
+                  className="font-semibold text-green-600 hover:text-green-500"
                 >
                   Đăng nhập ngay
                 </Link>
@@ -219,8 +219,8 @@ const Register = () => {
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
                   className={`w-12 h-12 text-center text-xl font-bold rounded-lg border transition-all ${
                     d
-                      ? "border-indigo-600 bg-white text-indigo-600"
-                      : "bg-gray-50 focus:border-indigo-500"
+                      ? "border-green-600 bg-white text-green-600"
+                      : "bg-gray-50 focus:border-green-500"
                   }`}
                 />
               ))}
@@ -251,7 +251,7 @@ const Register = () => {
                   <button
                     type="button"
                     onClick={handleInitRegister}
-                    className="text-indigo-600 font-medium"
+                    className="text-green-600 font-medium"
                   >
                     Gửi lại mã
                   </button>

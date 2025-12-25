@@ -33,16 +33,18 @@ const ForgotPassword = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    const result = await authService.forgotPassword(email);
-    setIsLoading(false);
+    setTimeout(async () => {
+      const result = await authService.forgotPassword(email);
+      setIsLoading(false);
 
-    if (result.ok) {
-      toast.success(result.data.message);
-      setStep(2);
-      setTimer(300); // Reset timer
-    } else {
-      toast.error(result.data.message);
-    }
+      if (result.ok) {
+        toast.success(result.data.message);
+        setStep(2);
+        setTimer(300); // Reset timer
+      } else {
+        toast.error(result.data.message);
+      }
+    }, 800);
   };
 
   // --- BƯỚC 2: VERIFY OTP ---
@@ -50,17 +52,19 @@ const ForgotPassword = () => {
     e.preventDefault();
     const otpCode = otp.join("");
     if (otpCode.length < 6) return toast.error("Vui lòng nhập đủ 6 số!");
-
     setIsLoading(true);
-    const result = await authService.verifyOtp(email, otpCode);
-    setIsLoading(false);
 
-    if (result.ok) {
-      toast.success("Mã OTP hợp lệ! Mời nhập mật khẩu mới.");
-      setStep(3); // Chuyển sang bước nhập mật khẩu
-    } else {
-      toast.error(result.data.message);
-    }
+    setTimeout(async () => {
+      const result = await authService.verifyOtp(email, otpCode);
+      setIsLoading(false);
+
+      if (result.ok) {
+        toast.success("Mã OTP hợp lệ! Mời nhập mật khẩu mới.");
+        setStep(3); // Chuyển sang bước nhập mật khẩu
+      } else {
+        toast.error(result.data.message);
+      }
+    }, 800);
   };
 
   // --- BƯỚC 3: ĐỔI MẬT KHẨU ---
@@ -72,18 +76,24 @@ const ForgotPassword = () => {
       return toast.error("Mật khẩu phải có ít nhất 6 ký tự!");
 
     setIsLoading(true);
-    const otpCode = otp.join("");
-    const result = await authService.resetPassword(email, otpCode, newPassword);
-    setIsLoading(false);
-
-    if (result.ok) {
-      toast.success(
-        "Đổi mật khẩu thành công! Đang chuyển về trang đăng nhập..."
+    setTimeout(async () => {
+      const otpCode = otp.join("");
+      const result = await authService.resetPassword(
+        email,
+        otpCode,
+        newPassword
       );
-      setTimeout(() => navigate("/"), 2000);
-    } else {
-      toast.error(result.data.message);
-    }
+      setIsLoading(false);
+
+      if (result.ok) {
+        toast.success(
+          "Đổi mật khẩu thành công! Đang chuyển về trang đăng nhập..."
+        );
+        setTimeout(() => navigate("/"), 2000);
+      } else {
+        toast.error(result.data.message);
+      }
+    }, 800)
   };
 
   // Helper cho OTP Input (Giữ nguyên logic cũ)
@@ -154,8 +164,8 @@ const ForgotPassword = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-                          required
-                          placeholder = "abc@gmail.com"
+              required
+              placeholder="abc@gmail.com"
               autoFocus
             />
             <Button type="submit" isLoading={isLoading}>
@@ -164,7 +174,7 @@ const ForgotPassword = () => {
             <div className="text-center">
               <Link
                 to="/"
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 flex items-center justify-center gap-2"
+                className="text-sm font-medium text-gray-600 hover:text-green-500 flex items-center justify-center gap-2"
               >
                 <ArrowLeft className="h-4 w-4" /> Quay lại
               </Link>
@@ -197,8 +207,8 @@ const ForgotPassword = () => {
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
                   className={`w-12 h-12 text-center text-xl font-bold rounded-lg border transition-all ${
                     d
-                      ? "border-indigo-600 bg-white text-indigo-600"
-                      : "bg-gray-50 focus:border-indigo-500"
+                      ? "border-green-600 bg-white text-green-600"
+                      : "bg-gray-50 focus:border-green-500"
                   }`}
                 />
               ))}
@@ -214,7 +224,7 @@ const ForgotPassword = () => {
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="mt-2 text-indigo-600 hover:underline"
+                className="mt-2 text-green-600 hover:underline"
               >
                 Gửi lại / Đổi Email
               </button>

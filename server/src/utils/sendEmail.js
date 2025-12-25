@@ -18,7 +18,7 @@ const sendEmail = async (email, otp) => {
       subject: "Mã xác thực đặt lại mật khẩu",
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #4F46E5;">Yêu cầu đặt lại mật khẩu</h2>
+          <h2 style="color: #1AC404FFFF;">Yêu cầu đặt lại mật khẩu</h2>
           <p>Bạn vừa yêu cầu đặt lại mật khẩu. Đây là mã OTP của bạn:</p>
           <h1 style="font-size: 32px; letter-spacing: 5px; color: #333;">${otp}</h1>
           <p>Mã này sẽ hết hạn sau <strong>5 phút</strong>.</p>

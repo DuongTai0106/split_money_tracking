@@ -47,7 +47,7 @@ const Login = ({ onLoginSuccess }) => {
         onSubmit={handleSubmit}
       >
         <Input
-          label="Email doanh nghiệp"
+          label="Email"
           icon={Mail}
           type="email"
           name="email"
@@ -73,7 +73,7 @@ const Login = ({ onLoginSuccess }) => {
           <div className="flex items-center justify-end mt-2">
             <Link
               to="/forgot-password"
-              className="text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+              className="text-sm font-medium text-green-600 hover:text-green-500 transition-colors"
             >
               Quên mật khẩu?
             </Link>
@@ -89,7 +89,7 @@ const Login = ({ onLoginSuccess }) => {
             Chưa có tài khoản?{" "}
             <Link
               to="/register"
-              className="font-semibold text-indigo-600 hover:text-indigo-500 transition-colors"
+              className="font-semibold text-green-600 hover:text-green-500 transition-colors"
             >
               Đăng ký ngay
             </Link>
