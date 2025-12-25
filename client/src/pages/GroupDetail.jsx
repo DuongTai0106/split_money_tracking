@@ -1,115 +1,68 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Settings, Plus } from "lucide-react";
+import { ArrowLeft, Settings, Plus, Loader2 } from "lucide-react"; // Thêm Loader2
 import { motion } from "framer-motion";
+import toast from "react-hot-toast"; // Dùng để báo lỗi
 
-// Import Components
+// Import Components & Service
 import GroupHeader from "../components/group-detail/GroupHeader";
 import BalanceCard from "../components/group-detail/BalanceCard";
 import TabNavigation from "../components/group-detail/TabNavigation";
 import ExpenseList from "../components/group-detail/ExpenseList";
 import CreateExpenseModal from "../components/modals/CreateExpenseModal";
-
-// --- MOCK DATA ---
-const MOCK_GROUP = {
-  id: 1,
-  name: "Trip to Da Lat",
-  image:
-    "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&auto=format&fit=crop",
-  memberCount: 5,
-  dateRange: "24 Th10 - 28 Th10",
-  members: [
-    { avatar: "https://ui-avatars.com/api/?name=User+1&background=random" },
-    { avatar: "https://ui-avatars.com/api/?name=User+2&background=random" },
-    { avatar: "https://ui-avatars.com/api/?name=User+3&background=random" },
-    { avatar: "https://ui-avatars.com/api/?name=User+4&background=random" },
-  ],
-};
-
-const MOCK_BALANCE = {
-  amount: 500000,
-  totalGroupSpend: "15.000.000đ",
-  details: [
-    {
-      name: "Tuấn",
-      amount: 300,
-      avatar: "https://ui-avatars.com/api/?name=Tuan",
-    },
-    {
-      name: "Minh",
-      amount: 200,
-      avatar: "https://ui-avatars.com/api/?name=Minh",
-    },
-  ],
-};
-
-const MOCK_TRANSACTIONS = [
-  {
-    date: "Hôm nay",
-    items: [
-      {
-        id: 1,
-        title: "Linh trả Tuấn",
-        payer: "Linh",
-        amount: "500.000đ",
-        shareAmount: "Thanh toán nợ",
-        category: "general",
-        isLender: false,
-      }, // Payment type
-      {
-        id: 2,
-        title: "Ăn tối BBQ",
-        payer: "Tuấn",
-        amount: "2.000.000đ",
-        shareAmount: "400k",
-        category: "food",
-        isLender: true,
-      },
-      {
-        id: 3,
-        title: "Drinks tại The Maze",
-        payer: "Bạn",
-        amount: "850.000đ",
-        shareAmount: "680k",
-        category: "drink",
-        isLender: true,
-      },
-    ],
-  },
-  {
-    date: "Hôm qua",
-    items: [
-      {
-        id: 4,
-        title: "Taxi về khách sạn",
-        payer: "Linh",
-        amount: "150.000đ",
-        shareAmount: "30k",
-        category: "transport",
-        isLender: false,
-      },
-      {
-        id: 5,
-        title: "Vé thác Datanla",
-        payer: "Tuấn",
-        amount: "1.200.000đ",
-        shareAmount: "240k",
-        category: "shopping",
-        isLender: false,
-      },
-    ],
-  },
-];
+import groupService from "../services/groupService";
 
 const GroupDetail = () => {
-  const { id } = useParams(); // Lấy ID từ URL để fetch API sau này
+  const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Chi tiêu");
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
 
+  // State cho dữ liệu
+  const [loading, setLoading] = useState(true);
+  const [groupData, setGroupData] = useState(null);
+  const [balanceData, setBalanceData] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+
+  // Hàm fetch dữ liệu
+  const fetchGroupDetails = async () => {
+    try {
+      const res = await groupService.getGroupDetails(id);
+      if (res.ok && res.data.success) {
+        setGroupData(res.data.group);
+        setBalanceData(res.data.balance);
+        setTransactions(res.data.transactions);
+      } else {
+        toast.error(res.data.message || "Không thể tải thông tin nhóm");
+        navigate("/"); // Đá về trang chủ nếu lỗi
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Lỗi kết nối server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchGroupDetails();
+  }, [id]);
+
+  // Loading UI
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0b1411] flex items-center justify-center text-[#34d399]">
+        <Loader2 className="animate-spin" size={40} />
+      </div>
+    );
+  }
+
+  // Nếu không có data (lỗi)
+  if (!groupData) return null;
+
   return (
     <div className="min-h-screen bg-[#0b1411] text-white font-sans pb-24 lg:pb-0">
-      {/* HEADER NAVIGATION (Sticky Top) */}
+      {/* HEADER NAVIGATION */}
       <div className="sticky top-0 z-30 bg-[#0b1411]/80 backdrop-blur-md border-b border-[#1c2e26] px-4 py-3 flex justify-between items-center">
         <button
           onClick={() => navigate(-1)}
@@ -119,8 +72,7 @@ const GroupDetail = () => {
         </button>
         <span className="font-bold text-lg lg:hidden opacity-0 animate-fadeIn">
           Detail
-        </span>{" "}
-        {/* Ẩn title ở header mobile, hiện khi scroll nếu muốn */}
+        </span>
         <button
           onClick={() => navigate(`/groups/${id}/settings`)}
           className="p-2 -mr-2 rounded-full hover:bg-[#1c2e26] transition-colors"
@@ -130,27 +82,36 @@ const GroupDetail = () => {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 lg:px-8">
-        {/* LAYOUT GRID CHO DESKTOP */}
         <div className="lg:grid lg:grid-cols-12 lg:gap-10">
-          {/* CỘT TRÁI: THÔNG TIN CHUNG (Sticky trên Desktop) */}
+          {/* CỘT TRÁI */}
           <div className="lg:col-span-4 lg:sticky lg:top-24 lg:h-fit">
-            <GroupHeader groupInfo={MOCK_GROUP} />
+            {/* Truyền dữ liệu thật vào Props */}
+            <GroupHeader groupInfo={groupData} />
 
             <div className="mt-6 mb-8 lg:mb-0">
-              <BalanceCard userBalance={MOCK_BALANCE} />
+              <BalanceCard userBalance={balanceData} />
             </div>
           </div>
 
-          {/* CỘT PHẢI: NỘI DUNG CHÍNH (Tabs & List) */}
+          {/* CỘT PHẢI */}
           <div className="lg:col-span-8 lg:mt-8">
             <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
 
             <div className="min-h-[500px]">
               {activeTab === "Chi tiêu" && (
-                <ExpenseList transactions={MOCK_TRANSACTIONS} />
+                <>
+                  {transactions.length > 0 ? (
+                    <ExpenseList transactions={transactions} />
+                  ) : (
+                    <div className="text-center text-gray-500 py-10 italic">
+                      Chưa có chi tiêu nào. Hãy thêm mới!
+                    </div>
+                  )}
+                </>
               )}
               {activeTab === "Số dư" && (
                 <div className="text-center text-gray-500 py-10">
+                  {/* Có thể tái sử dụng BalanceCard hoặc vẽ biểu đồ ở đây */}
                   Chức năng đang phát triển...
                 </div>
               )}
@@ -164,7 +125,7 @@ const GroupDetail = () => {
         </div>
       </div>
 
-      {/* FLOATING ACTION BUTTON (Cho Mobile & Desktop) */}
+      {/* FAB */}
       <div className="fixed bottom-6 right-6 lg:bottom-10 lg:right-10 z-40">
         <motion.button
           onClick={() => setIsExpenseModalOpen(true)}
@@ -176,9 +137,17 @@ const GroupDetail = () => {
           <span className="text-base">Thêm chi tiêu</span>
         </motion.button>
       </div>
+
+      {/* Modal tạo chi tiêu mới */}
       <CreateExpenseModal
         isOpen={isExpenseModalOpen}
         onClose={() => setIsExpenseModalOpen(false)}
+        groupId={id} // Truyền ID nhóm vào để tạo bill đúng nhóm
+        members={groupData.members} // Truyền danh sách thành viên để chọn người split bill
+        onSuccess={() => {
+          fetchGroupDetails(); // Reload lại dữ liệu sau khi tạo bill thành công
+          setIsExpenseModalOpen(false);
+        }}
       />
     </div>
   );

@@ -5,9 +5,11 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation, // <-- Import thêm useLocation
 } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { Loader2 } from "lucide-react";
+import { AnimatePresence } from "framer-motion"; // <-- Import AnimatePresence
 
 // --- SERVICES ---
 import authService from "./services/authService";
@@ -18,13 +20,116 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import PublicOnlyRoute from "./components/PublicOnlyRoute";
 import Home from "./pages/Home";
-
-// --- NEW IMPORT ---
-// Import LayoutWrapper mới thay vì MainLayout cũ
-import LayoutWrapper from "./components/layout/LayoutWrapper";
 import GroupDetail from "./pages/GroupDetail";
 import GroupSettings from "./pages/GroupSettings";
 
+// Components UI
+import PageTransition from "./components/common/PageTransition"; // <-- Import PageTransition
+import LayoutWrapper from "./components/layout/LayoutWrapper";
+
+// --- COMPONENT ROUTES RIÊNG (để dùng được useLocation) ---
+const AnimatedRoutes = ({ user, setUser, handleLogout }) => {
+  const location = useLocation();
+
+  return (
+    // mode="wait": Đợi trang cũ biến mất xong trang mới mới hiện ra
+    <AnimatePresence mode="wait">
+      {/* Key là pathname để kích hoạt animation mỗi khi đổi URL */}
+      <Routes location={location} key={location.pathname}>
+        {/* --- PUBLIC ROUTES --- */}
+        <Route
+          path="/"
+          element={
+            <PublicOnlyRoute user={user}>
+              <PageTransition>
+                <Login onLoginSuccess={setUser} />
+              </PageTransition>
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <PublicOnlyRoute user={user}>
+              <PageTransition>
+                <Register />
+              </PageTransition>
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <PublicOnlyRoute user={user}>
+              <PageTransition>
+                <ForgotPassword />
+              </PageTransition>
+            </PublicOnlyRoute>
+          }
+        />
+
+        {/* --- PROTECTED ROUTES --- */}
+        {user ? (
+          <>
+            {/* NHÓM 1: CÓ SIDEBAR (LayoutWrapper) */}
+            <Route
+              element={<LayoutWrapper user={user} onLogout={handleLogout} />}
+            >
+              <Route
+                path="/groups"
+                element={
+                  <PageTransition>
+                    <Home user={user} />
+                  </PageTransition>
+                }
+              />
+            </Route>
+
+            {/* NHÓM 2: KHÔNG SIDEBAR (Full Screen) */}
+            {/* Cập nhật path cho khớp với navigate trong Home.jsx (/groups/:id/details) */}
+            <Route
+              path="/groups/:id/details"
+              element={
+                <PageTransition>
+                  <GroupDetail />
+                </PageTransition>
+              }
+            />
+
+            {/* Giữ lại route cũ nếu bạn muốn support cả link ngắn */}
+            <Route
+              path="/groups/:id"
+              element={
+                <Navigate
+                  to={`/groups/${location.pathname.split("/")[2]}/details`}
+                  replace
+                />
+              }
+            />
+
+            <Route
+              path="/groups/:id/settings"
+              element={
+                <PageTransition>
+                  <GroupSettings />
+                </PageTransition>
+              }
+            />
+
+            {/* Redirects */}
+            <Route path="/home" element={<Navigate to="/groups" replace />} />
+            <Route path="*" element={<Navigate to="/groups" replace />} />
+          </>
+        ) : (
+          /* Chưa login thì đá về trang chủ */
+          <Route path="*" element={<Navigate to="/" replace />} />
+        )}
+      </Routes>
+    </AnimatePresence>
+  );
+};
+
+// --- MAIN APP COMPONENT ---
 function App() {
   const [user, setUser] = useState(null);
   const [isChecking, setIsChecking] = useState(true);
@@ -41,7 +146,7 @@ function App() {
   }, []);
 
   const handleLogout = async () => {
-    await authService.logout(); // Gọi service logout (nếu có)
+    await authService.logout();
     setUser(null);
   };
 
@@ -65,59 +170,12 @@ function App() {
           },
         }}
       />
-      <Routes>
-        {/* --- PUBLIC ROUTES --- */}
-        <Route
-          path="/"
-          element={
-            <PublicOnlyRoute user={user}>
-              <Login onLoginSuccess={setUser} />
-            </PublicOnlyRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicOnlyRoute user={user}>
-              <Register />
-            </PublicOnlyRoute>
-          }
-        />
-        <Route
-          path="/forgot-password"
-          element={
-            <PublicOnlyRoute user={user}>
-              <ForgotPassword />
-            </PublicOnlyRoute>
-          }
-        />
-
-        {/* --- PROTECTED ROUTES --- */}
-        {user ? (
-          <>
-            {/* NHÓM 1: CÓ SIDEBAR (LayoutWrapper) */}
-            {/* Dành cho các trang cấp 1: Trang chủ, Danh sách nhóm, Profile, Setting */}
-            <Route
-              element={<LayoutWrapper user={user} onLogout={handleLogout} />}
-            >
-              <Route path="/groups" element={<Home user={user} />} />
-              {/* Nếu sau này có trang /profile thì thêm vào đây */}
-            </Route>
-
-            {/* NHÓM 2: KHÔNG SIDEBAR (Full Screen) */}
-            {/* Dành cho các trang chi tiết cần không gian rộng */}
-            <Route path="/groups/:id" element={<GroupDetail />} />
-            <Route path="/groups/:id/settings" element={<GroupSettings />} />
-
-            {/* Redirects */}
-            <Route path="/home" element={<Navigate to="/groups" replace />} />
-            <Route path="*" element={<Navigate to="/groups" replace />} />
-          </>
-        ) : (
-          /* Chưa login thì đá về trang chủ (Login) */
-          <Route path="*" element={<Navigate to="/" replace />} />
-        )}
-      </Routes>
+      {/* Gọi AnimatedRoutes bên trong Router */}
+      <AnimatedRoutes
+        user={user}
+        setUser={setUser}
+        handleLogout={handleLogout}
+      />
     </Router>
   );
 }

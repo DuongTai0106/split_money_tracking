@@ -1,6 +1,6 @@
 import express from "express";
 import verifyToken from "../middlewares/authMiddleware.js";
-import { createGroup, getMyGroups } from "../controller/groupController.js";
+import { createGroup, getGroupDetails, getMyGroups } from "../controller/groupController.js";
 import multer from "multer";
 import { storage } from "../config/cloudinary.js";
 
@@ -14,5 +14,6 @@ router.post(
   createGroup
 );
 router.get("/my-groups", verifyToken, getMyGroups);
+router.get("/:id", verifyToken, getGroupDetails)
 
 export default router;

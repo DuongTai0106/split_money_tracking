@@ -1,5 +1,6 @@
 import pool from "../config/db.js";
 import { cloudinary } from "../config/cloudinary.js";
+import { formatDateGroup } from "../utils/time.js";
 
 export const createGroup = async (req, res) => {
   const client = await pool.connect();
@@ -87,5 +88,182 @@ export const getMyGroups = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Lỗi Server" });
+  }
+};
+
+// Helper: Format date sang "Hôm nay", "Hôm qua", "DD/MM/YYYY"
+// const formatDateGroup = (dateStr) => {
+//     const date = new Date(dateStr);
+//     const today = new Date();
+//     const yesterday = new Date(today);
+//     yesterday.setDate(yesterday.getDate() - 1);
+
+//     if (date.toDateString() === today.toDateString()) return "Hôm nay";
+//     if (date.toDateString() === yesterday.toDateString()) return "Hôm qua";
+//     return date.toLocaleDateString('vi-VN');
+// };
+
+export const getGroupDetails = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const groupId = req.params.id;
+    // const currentUserId = req.user.user_id; // Lưu ý: req.user lấy từ middleware, check xem nó là .id hay .user_id
+
+    // GIẢ SỬ middleware auth của bạn gán req.user = { id: ... } hoặc { user_id: ... }
+    // Hãy đảm bảo biến này đúng. Mình tạm dùng user_id cho khớp DB.
+    const currentUserId = req.user.user_id || req.user.id;
+
+    // 1. Lấy thông tin nhóm & thành viên
+    // SỬA: Thay u.id -> u.user_id, u.full_name -> u.username
+    const groupQuery = `
+            SELECT 
+                g.*, 
+                json_agg(json_build_object(
+                    'id', u.user_id,      
+                    'name', u.username,   
+                    'avatar', u.avatar_url        -- Tạm để NULL vì bảng chưa có cột avatar
+                )) as members
+            FROM groups g
+            JOIN group_members gm ON g.id = gm.group_id
+            JOIN users u ON gm.user_id = u.user_id  -- JOIN bằng user_id
+            WHERE g.id = $1
+            GROUP BY g.id
+        `;
+    const groupRes = await client.query(groupQuery, [groupId]);
+
+    if (groupRes.rows.length === 0)
+      return res.status(404).json({ message: "Nhóm không tồn tại" });
+    const groupInfo = groupRes.rows[0];
+
+    // 2. Lấy danh sách Bills & Details
+    // SỬA: Thay b.payer_id = u.id -> b.payer_id = u.user_id
+    const billsQuery = `
+            SELECT 
+                b.id, b.title, b.amount, b.category, b.created_at, b.payer_id,
+                u.username as payer_name, -- Lấy username thay vì full_name
+                (
+                    SELECT json_agg(json_build_object('user_id', bd.user_id, 'amount', bd.amount))
+                    FROM bill_details bd WHERE bd.bill_id = b.id
+                ) as splits
+            FROM bills b
+            JOIN users u ON b.payer_id = u.user_id -- JOIN bằng user_id
+            WHERE b.group_id = $1
+            ORDER BY b.created_at DESC
+        `;
+    const billsRes = await client.query(billsQuery, [groupId]);
+    const allBills = billsRes.rows;
+
+    // --- XỬ LÝ LOGIC SỐ DƯ (BALANCE) ---
+    let myBalance = 0;
+    let totalGroupSpend = 0;
+    let debtDetails = {};
+
+    groupInfo.members.forEach((m) => {
+      if (m.id !== currentUserId) debtDetails[m.id] = 0;
+    });
+
+    allBills.forEach((bill) => {
+      totalGroupSpend += parseFloat(bill.amount);
+      const isPayer = bill.payer_id === currentUserId;
+
+      // Kiểm tra nếu bill có splits (tránh lỗi null)
+      if (bill.splits) {
+        bill.splits.forEach((split) => {
+          const splitAmount = parseFloat(split.amount);
+
+          if (isPayer) {
+            if (split.user_id !== currentUserId) {
+              myBalance += splitAmount;
+              debtDetails[split.user_id] =
+                (debtDetails[split.user_id] || 0) + splitAmount;
+            }
+          } else if (split.user_id === currentUserId) {
+            myBalance -= splitAmount;
+            debtDetails[bill.payer_id] =
+              (debtDetails[bill.payer_id] || 0) - splitAmount;
+          }
+        });
+      }
+    });
+
+    const balanceDetailList = Object.keys(debtDetails)
+      .map((uid) => {
+        const amount = debtDetails[uid];
+        // So sánh lỏng (==) vì key object là string, id có thể là int
+        if (amount === 0) return null;
+        const member = groupInfo.members.find((m) => m.id == uid);
+        return {
+          id: uid,
+          name: member ? member.name : "Unknown",
+          avatar: member ? member.avatar : "",
+          amount: amount,
+        };
+      })
+      .filter((item) => item !== null);
+
+    // --- XỬ LÝ TRANSACTIONS ---
+    const groupedTransactions = {};
+    allBills.forEach((bill) => {
+      const dateKey = formatDateGroup(bill.created_at);
+      if (!groupedTransactions[dateKey]) groupedTransactions[dateKey] = [];
+
+      let shareAmountText = "";
+      let isLender = bill.payer_id === currentUserId;
+
+      // Safe check cho splits
+      const splits = bill.splits || [];
+
+      if (isLender) {
+        const myUsage =
+          splits.find((s) => s.user_id === currentUserId)?.amount || 0;
+        const lendAmount = parseFloat(bill.amount) - parseFloat(myUsage);
+        shareAmountText = `${lendAmount.toLocaleString()}đ`;
+      } else {
+        const myDebt =
+          splits.find((s) => s.user_id === currentUserId)?.amount || 0;
+        shareAmountText = `${parseFloat(myDebt).toLocaleString()}đ`;
+      }
+
+      groupedTransactions[dateKey].push({
+        id: bill.id,
+        title: bill.title,
+        payer: bill.payer_name,
+        amount: `${parseFloat(bill.amount).toLocaleString()}đ`,
+        shareAmount: shareAmountText,
+        category: bill.category,
+        isLender: isLender,
+        timestamp: bill.created_at,
+      });
+    });
+
+    const transactionList = Object.keys(groupedTransactions).map((date) => ({
+      date,
+      items: groupedTransactions[date],
+    }));
+
+    res.status(200).json({
+      success: true,
+      group: {
+        id: groupInfo.id,
+        name: groupInfo.name,
+        image: groupInfo.image_url,
+        memberCount: groupInfo.members.length,
+        members: groupInfo.members,
+        dateRange: `Tạo ngày ${new Date(
+          groupInfo.created_at
+        ).toLocaleDateString("vi-VN")}`,
+      },
+      balance: {
+        amount: myBalance,
+        totalGroupSpend: `${totalGroupSpend.toLocaleString()}đ`,
+        details: balanceDetailList,
+      },
+      transactions: transactionList,
+    });
+  } catch (error) {
+    console.error("GET DETAILS ERROR:", error); // Log lỗi chi tiết ra console server
+    res.status(500).json({ message: "Lỗi server", error: error.message });
+  } finally {
+    client.release();
   }
 };

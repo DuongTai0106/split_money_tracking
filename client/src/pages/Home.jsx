@@ -19,6 +19,7 @@ import GroupList from "../components/dashboard/GroupList";
 import QuickActions from "../components/dashboard/QuickActions";
 import groupService from "../services/groupService";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 // --- MOCK DATA ---
 // const GROUPS = [
 //   {
@@ -103,6 +104,7 @@ const Home = ({ user }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [groups, setGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const navigate = useNavigate();
   const fetchGroups = async () => {
     try {
       const res = await groupService.getMyGroups();
@@ -118,6 +120,11 @@ const Home = ({ user }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGroupClick = (groupId) => {
+    // Giả sử đường dẫn của bạn là /groups/:id/details
+    navigate(`/groups/${groupId}`);
   };
 
   useEffect(() => {
@@ -215,6 +222,7 @@ const Home = ({ user }) => {
               {groups.map((group) => (
                 // Map dữ liệu từ API vào Component GroupItem
                 <GroupItem
+                  onClick={() => handleGroupClick(group.id)}
                   key={group.id}
                   group={{
                     id: group.id,
