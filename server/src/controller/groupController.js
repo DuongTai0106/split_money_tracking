@@ -267,3 +267,61 @@ export const getGroupDetails = async (req, res) => {
     client.release();
   }
 };
+
+export const createBill = async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { groupId, title, amount, category, splitDetails } = req.body;
+    // splitDetails là mảng: [{ user_id: 1, amount: 50000 }, { user_id: 2, amount: 50000 }]
+    const payerId = req.user.user_id || req.user.id; // Người tạo bill là người trả tiền (mặc định)
+
+    // Validate cơ bản
+    if (!groupId || !amount || !title) {
+      return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+    }
+
+    await client.query("BEGIN"); // Bắt đầu transaction
+
+    // 1. Tạo Bill
+    const billQuery = `
+      INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+      RETURNING id
+    `;
+    const billRes = await client.query(billQuery, [
+      groupId,
+      payerId,
+      title,
+      amount,
+      category,
+    ]);
+    const billId = billRes.rows[0].id;
+
+    // 2. Tạo Bill Details (Vòng lặp insert từng người)
+    // Lưu ý: splitDetails phải được tính toán chuẩn từ Frontend gửi lên
+    for (const detail of splitDetails) {
+      const detailQuery = `
+        INSERT INTO bill_details (bill_id, user_id, amount)
+        VALUES ($1, $2, $3)
+      `;
+      await client.query(detailQuery, [billId, detail.user_id, detail.amount]);
+    }
+
+    await client.query("COMMIT"); // Lưu tất cả nếu không có lỗi
+
+    res.status(201).json({
+      success: true,
+      message: "Tạo hóa đơn thành công",
+      billId: billId,
+    });
+  } catch (error) {
+    await client.query("ROLLBACK"); // Hủy hết nếu có lỗi
+    console.error("Create Bill Error:", error);
+    res
+      .status(500)
+      .json({ message: "Lỗi server khi tạo hóa đơn", error: error.message });
+  } finally {
+    client.release();
+  }
+};

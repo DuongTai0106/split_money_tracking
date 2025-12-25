@@ -43,15 +43,6 @@ const ExpenseItem = ({ expense }) => {
 
       <div className="text-right">
         <p className="text-white font-bold">{expense.amount}</p>
-        <p
-          className={`text-xs font-medium ${
-            isLender ? "text-[#34d399]" : "text-red-400"
-          }`}
-        >
-          {isLender
-            ? `Bạn cho vay ${expense.shareAmount}`
-            : `Bạn nợ ${expense.shareAmount}`}
-        </p>
       </div>
     </motion.div>
   );

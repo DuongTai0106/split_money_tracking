@@ -1,93 +1,79 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
-  Save,
   FileText,
   ScanLine,
   Calendar,
   User,
   Check,
-  Search,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
+import toast from "react-hot-toast";
+import groupService from "../../services/groupService";
 
-// --- MOCK DATA FOR MEMBERS ---
-const MEMBERS = [
-  {
-    id: 1,
-    name: "Bạn",
-    avatar: "https://ui-avatars.com/api/?name=You",
-    isMe: true,
-  },
-  {
-    id: 2,
-    name: "Hương Lan",
-    avatar: "https://ui-avatars.com/api/?name=Huong+Lan",
-    isMe: false,
-  },
-  {
-    id: 3,
-    name: "Tuấn Anh",
-    avatar: "https://ui-avatars.com/api/?name=Tuan+Anh",
-    isMe: false,
-  },
-  {
-    id: 4,
-    name: "Minh",
-    avatar: "https://ui-avatars.com/api/?name=Minh",
-    isMe: false,
-  },
-];
-
-const CATEGORIES = [
-  { id: "food", label: "Ăn uống", icon: "Utensils" },
-  { id: "transport", label: "Di chuyển", icon: "Car" },
-  { id: "shopping", label: "Mua sắm", icon: "ShoppingCart" },
-  { id: "entertainment", label: "Giải trí", icon: "PartyPopper" },
-];
-
-const SPLIT_METHODS = [
-  { id: "equal", label: "Chia đều" },
-  { id: "amount", label: "Số tiền" },
-];
-
-// --- 1. THÊM CÁC HÀM NÀY ĐỂ XỬ LÝ SỐ TIỀN ---
+// Helper xử lý tiền tệ
 const formatCurrency = (value) => {
   if (!value) return "";
-  // Xóa hết ký tự không phải số
-  const rawValue = value.replace(/\D/g, "");
-  // Thêm dấu chấm phân cách hàng nghìn
+  const rawValue = value.toString().replace(/\D/g, "");
   return rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 const parseCurrency = (value) => {
-  // Xóa dấu chấm để lấy số nguyên tính toán
-  return parseInt(value.replace(/\./g, "") || "0", 10);
+  if (!value) return 0;
+  return parseInt(value.toString().replace(/\./g, "") || "0", 10);
 };
 
-const CreateExpenseModal = ({ isOpen, onClose }) => {
+const CATEGORIES = [
+  { id: "food", label: "Ăn uống" },
+  { id: "transport", label: "Di chuyển" },
+  { id: "shopping", label: "Mua sắm" },
+  { id: "entertainment", label: "Giải trí" },
+  { id: "general", label: "Khác" },
+];
+
+const CreateExpenseModal = ({
+  isOpen,
+  onClose,
+  groupId,
+  members = [],
+  onSuccess,
+}) => {
   // --- FORM STATE ---
-  const [amount, setAmount] = useState("100.000"); // String để dễ nhập liệu
+  const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("food");
-  const [splitMethod, setSplitMethod] = useState("equal");
+  const [loading, setLoading] = useState(false);
 
-  // State quản lý danh sách người được chia tiền (Mặc định chọn tất cả)
-  const [selectedMembers, setSelectedMembers] = useState(
-    MEMBERS.map((m) => m.id)
-  );
+  // Mặc định chọn tất cả thành viên trong nhóm
+  const [selectedMembers, setSelectedMembers] = useState([]);
 
-  // --- 2. SỬA LẠI LOGIC TÍNH TOÁN (Dùng parseCurrency) ---
-  const rawAmount = parseCurrency(amount); // Chuyển chuỗi "100.000" thành số 100000
+  // Reset form khi mở modal
+  useEffect(() => {
+    if (isOpen) {
+      setAmount("");
+      setDescription("");
+      setCategory("food");
+      // Khi mở modal, mặc định tick chọn tất cả member
+      if (members.length > 0) {
+        setSelectedMembers(members.map((m) => m.id));
+      }
+    }
+  }, [isOpen, members]);
 
+  // --- LOGIC TÍNH TOÁN ---
+  const rawAmount = parseCurrency(amount);
+
+  // Logic Chia đều (Equal Split)
+  // Nếu có người được chọn, chia đều. Nếu không, = 0
   const perPersonAmount =
-    selectedMembers.length > 0 ? rawAmount / selectedMembers.length : 0;
+    selectedMembers.length > 0
+      ? Math.floor(rawAmount / selectedMembers.length)
+      : 0;
 
   const handleAmountChange = (e) => {
-    const input = e.target.value;
-    // Format lại input ngay lập tức rồi set vào state
-    setAmount(formatCurrency(input));
+    setAmount(formatCurrency(e.target.value));
   };
 
   const toggleMember = (id) => {
@@ -99,10 +85,60 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
   };
 
   const toggleSelectAll = () => {
-    if (selectedMembers.length === MEMBERS.length) {
+    if (selectedMembers.length === members.length) {
       setSelectedMembers([]);
     } else {
-      setSelectedMembers(MEMBERS.map((m) => m.id));
+      setSelectedMembers(members.map((m) => m.id));
+    }
+  };
+
+  // --- XỬ LÝ SUBMIT ---
+  const handleSave = async () => {
+    // 1. Validate
+    if (rawAmount <= 0) return toast.error("Vui lòng nhập số tiền!");
+    if (!description.trim()) return toast.error("Vui lòng nhập mô tả!");
+    if (selectedMembers.length === 0)
+      return toast.error("Chọn ít nhất 1 người để chia tiền!");
+
+    setLoading(true);
+
+    // 2. Chuẩn bị payload gửi Backend
+    // Tạo mảng splitDetails: [{ user_id: 1, amount: 50000 }, ...]
+    const splitDetails = selectedMembers.map((memberId) => ({
+      user_id: memberId,
+      amount: perPersonAmount, // Hiện tại đang làm logic chia đều đơn giản
+    }));
+
+    // Xử lý số dư lẻ (nếu chia không hết). Ví dụ 100k chia 3 người = 33333. Dư 1 đồng.
+    // Cộng phần dư vào người đầu tiên hoặc người trả tiền (tuỳ logic, ở đây mình bỏ qua cho đơn giản hoặc bạn cộng vào item đầu)
+    const totalSplit = perPersonAmount * selectedMembers.length;
+    const remainder = rawAmount - totalSplit;
+    if (remainder > 0 && splitDetails.length > 0) {
+      splitDetails[0].amount += remainder;
+    }
+
+    const payload = {
+      groupId: groupId,
+      title: description,
+      amount: rawAmount,
+      category: category,
+      splitDetails: splitDetails,
+    };
+
+    // 3. Gọi API
+    try {
+      const res = await groupService.createBill(payload);
+      if (res.ok && res.data.success) {
+        toast.success("Đã thêm hóa đơn!");
+        if (onSuccess) onSuccess(); // Callback để reload lại trang GroupDetail
+        onClose();
+      } else {
+        toast.error(res.data.message || "Lỗi khi lưu hóa đơn");
+      }
+    } catch (error) {
+      toast.error("Lỗi kết nối");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -115,39 +151,42 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
           exit={{ opacity: 0 }}
           className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-0 lg:p-4"
         >
-          {/* Modal Container */}
           <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="bg-[#1c2e26] w-full lg:max-w-5xl h-full lg:h-auto lg:max-h-[90vh] lg:rounded-3xl flex flex-col overflow-hidden shadow-2xl"
+            className="bg-[#1c2e26] w-full lg:max-w-4xl h-full lg:h-auto lg:max-h-[90vh] lg:rounded-3xl flex flex-col overflow-hidden shadow-2xl"
           >
-            {/* --- HEADER --- */}
-            <div className="flex items-center justify-between p-4 lg:p-6 border-b border-[#2d4a3e] bg-[#1c2e26] z-10">
+            {/* HEADER */}
+            <div className="flex items-center justify-between p-4 border-b border-[#2d4a3e] bg-[#1c2e26] z-10">
               <button
                 onClick={onClose}
-                className="p-2 -ml-2 rounded-full hover:bg-[#2d4a3e] transition-colors text-white"
+                className="p-2 -ml-2 rounded-full hover:bg-[#2d4a3e] text-white"
               >
                 <X size={24} />
               </button>
               <h2 className="text-xl font-bold text-white">Thêm Chi tiêu</h2>
-              <button className="bg-[#34d399] text-[#0b1411] px-4 py-1.5 rounded-lg font-bold text-sm hover:bg-[#2cb683] transition-colors">
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="bg-[#34d399] text-[#0b1411] px-4 py-1.5 rounded-lg font-bold text-sm hover:bg-[#2cb683] transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading && <Loader2 size={16} className="animate-spin" />}
                 Lưu
               </button>
             </div>
 
-            {/* --- BODY (Scrollable) --- */}
+            {/* BODY */}
             <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0b1411] lg:bg-[#1c2e26]">
-              {/* GRID SYSTEM */}
               <div className="flex flex-col lg:grid lg:grid-cols-2 lg:gap-8 lg:p-8">
-                {/* === LEFT COLUMN: INPUT INFOS === */}
+                {/* LEFT: INPUTS */}
                 <div className="p-4 space-y-6">
-                  {/* 1. Amount Input (Big) */}
+                  {/* Amount */}
                   <div className="flex flex-col items-center justify-center py-6 lg:py-0">
                     <div className="flex items-center gap-2 text-[#34d399]">
                       <span className="p-1.5 bg-[#34d399]/10 rounded-full">
-                        <ScanLine size={16} /> {/* Giả lập icon hóa đơn */}
+                        <ScanLine size={16} />
                       </span>
                       <span className="text-xs font-bold uppercase tracking-wider">
                         Tổng tiền
@@ -155,12 +194,13 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                     </div>
                     <div className="relative mt-2 flex items-baseline justify-center w-full">
                       <input
-                        type="text" // Đổi từ number -> text
-                        inputMode="numeric" // Để mobile hiện bàn phím số
+                        type="text"
+                        inputMode="numeric"
                         value={amount}
-                        onChange={handleAmountChange} // Dùng hàm handle mới
+                        onChange={handleAmountChange}
                         className="bg-transparent text-center text-5xl lg:text-6xl font-bold text-white focus:outline-none w-full placeholder-gray-600"
                         placeholder="0"
+                        autoFocus
                       />
                       <span className="text-2xl text-gray-500 absolute right-4 lg:right-10 top-4">
                         đ
@@ -168,7 +208,7 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                     </div>
                   </div>
 
-                  {/* 2. Description Input */}
+                  {/* Description */}
                   <div className="flex items-center gap-3 bg-[#0b1411] lg:bg-[#16261f] p-4 rounded-2xl border border-[#2d4a3e]">
                     <FileText className="text-gray-400" size={20} />
                     <input
@@ -178,71 +218,40 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                       placeholder="Mô tả (ví dụ: Ăn trưa, Grab...)"
                       className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none"
                     />
-                    <button className="p-2 bg-[#1c2e26] rounded-lg text-gray-400 hover:text-white border border-[#2d4a3e]">
-                      <ScanLine size={18} />
-                    </button>
                   </div>
 
-                  {/* 3. Category Selector */}
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                  {/* Category */}
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                     {CATEGORIES.map((cat) => (
                       <button
                         key={cat.id}
                         onClick={() => setCategory(cat.id)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-full whitespace-nowrap font-medium text-sm transition-all border ${
+                        className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium border transition-all ${
                           category === cat.id
                             ? "bg-[#34d399] text-[#0b1411] border-[#34d399]"
-                            : "bg-[#1c2e26] text-gray-400 border-[#2d4a3e] hover:border-[#34d399]/50"
+                            : "bg-[#1c2e26] text-gray-400 border-[#2d4a3e]"
                         }`}
                       >
-                        {/* Bạn có thể map icon thật ở đây */}
-                        <span>{cat.label}</span>
+                        {cat.label}
                       </button>
                     ))}
                   </div>
 
-                  {/* 4. Meta Info (Date & Payer) */}
-                  <div className="bg-[#1c2e26] lg:bg-[#16261f] rounded-2xl border border-[#2d4a3e] overflow-hidden">
-                    {/* Date */}
-                    <div className="flex items-center justify-between p-4 border-b border-[#2d4a3e] hover:bg-[#233930] cursor-pointer transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-orange-500/10 rounded-lg text-orange-500">
-                          <Calendar size={18} />
-                        </div>
-                        <span className="text-white font-medium">Ngày</span>
+                  {/* Date & Payer (Static for now) */}
+                  <div className="bg-[#1c2e26] lg:bg-[#16261f] rounded-2xl border border-[#2d4a3e] p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-[#34d399]/10 rounded-lg text-[#34d399]">
+                        <User size={18} />
                       </div>
-                      <div className="flex items-center gap-2 text-gray-400 text-sm">
-                        <span>Hôm nay, 24/10</span>
-                        <ChevronRight size={16} />
-                      </div>
+                      <span className="text-white text-sm font-medium">
+                        Người trả: <span className="text-[#34d399]">Bạn</span>
+                      </span>
                     </div>
-
-                    {/* Payer */}
-                    <div className="flex items-center justify-between p-4 hover:bg-[#233930] cursor-pointer transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-[#34d399]/10 rounded-lg text-[#34d399]">
-                          <User size={18} />
-                        </div>
-                        <span className="text-white font-medium">
-                          Người trả tiền
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={MEMBERS[0].avatar}
-                          className="w-6 h-6 rounded-full"
-                          alt="Me"
-                        />
-                        <span className="text-[#34d399] font-bold text-sm">
-                          Bạn
-                        </span>
-                        <ChevronRight size={16} className="text-gray-400" />
-                      </div>
-                    </div>
+                    <span className="text-xs text-gray-500">Hôm nay</span>
                   </div>
                 </div>
 
-                {/* === RIGHT COLUMN: SPLIT LOGIC === */}
+                {/* RIGHT: SPLIT LOGIC */}
                 <div className="p-4 space-y-4 lg:border-l lg:border-[#2d4a3e] lg:pl-8">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-white font-bold text-lg">
@@ -252,30 +261,13 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                       onClick={toggleSelectAll}
                       className="text-[#34d399] text-sm font-bold hover:underline"
                     >
-                      {selectedMembers.length === MEMBERS.length
+                      {selectedMembers.length === members.length
                         ? "Bỏ chọn tất cả"
                         : "Chọn tất cả"}
                     </button>
                   </div>
 
-                  {/* Split Method Tabs */}
-                  <div className="flex bg-[#0b1411] p-1 rounded-xl border border-[#2d4a3e]">
-                    {SPLIT_METHODS.map((method) => (
-                      <button
-                        key={method.id}
-                        onClick={() => setSplitMethod(method.id)}
-                        className={`flex-1 py-2 rounded-lg text-xs lg:text-sm font-bold transition-colors ${
-                          splitMethod === method.id
-                            ? "bg-[#1c2e26] text-white shadow-sm border border-[#2d4a3e]"
-                            : "text-gray-500 hover:text-gray-300"
-                        }`}
-                      >
-                        {method.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Calculation Summary Bar */}
+                  {/* Summary */}
                   <div className="flex items-center justify-between bg-[#1c2e26] px-4 py-3 rounded-xl border border-[#2d4a3e]">
                     <div className="flex items-center gap-2 text-gray-400 text-xs">
                       <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center text-[10px] text-black font-bold">
@@ -284,14 +276,13 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                       Chia đều cho {selectedMembers.length} người
                     </div>
                     <span className="text-white font-bold font-mono">
-                      {Math.round(perPersonAmount).toLocaleString("vi-VN")}đ /
-                      người
+                      {perPersonAmount.toLocaleString("vi-VN")}đ / người
                     </span>
                   </div>
 
-                  {/* Members List with Toggle */}
-                  <div className="space-y-3 mt-4">
-                    {MEMBERS.map((member) => {
+                  {/* Member List */}
+                  <div className="space-y-3 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                    {members.map((member) => {
                       const isSelected = selectedMembers.includes(member.id);
                       return (
                         <div
@@ -306,7 +297,10 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                           <div className="flex items-center gap-3">
                             <div className="relative">
                               <img
-                                src={member.avatar}
+                                src={
+                                  member.avatar ||
+                                  `https://ui-avatars.com/api/?name=${member.name}&background=random`
+                                }
                                 alt={member.name}
                                 className={`w-10 h-10 rounded-full border-2 ${
                                   isSelected
@@ -314,11 +308,7 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                                     : "border-gray-600"
                                 }`}
                               />
-                              {member.isMe && (
-                                <div className="absolute -bottom-1 -right-1 bg-[#34d399] text-[#0b1411] rounded-full p-0.5 border border-[#0b1411]">
-                                  <Check size={10} strokeWidth={4} />
-                                </div>
-                              )}
+                              {/* Icon check nếu là mình (tuỳ logic) */}
                             </div>
                             <div>
                               <p
@@ -336,15 +326,14 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                                 }`}
                               >
                                 {isSelected
-                                  ? Math.round(perPersonAmount).toLocaleString(
-                                      "vi-VN"
-                                    ) + "đ"
+                                  ? perPersonAmount.toLocaleString("vi-VN") +
+                                    "đ"
                                   : "0đ"}
                               </p>
                             </div>
                           </div>
 
-                          {/* Custom Toggle Switch */}
+                          {/* Toggle Switch */}
                           <div
                             className={`w-12 h-7 rounded-full flex items-center p-1 transition-colors duration-300 ${
                               isSelected ? "bg-[#34d399]" : "bg-gray-600"
@@ -353,11 +342,6 @@ const CreateExpenseModal = ({ isOpen, onClose }) => {
                             <motion.div
                               layout
                               className="w-5 h-5 bg-white rounded-full shadow-md"
-                              transition={{
-                                type: "spring",
-                                stiffness: 500,
-                                damping: 30,
-                              }}
                               style={{ marginLeft: isSelected ? "auto" : "0" }}
                             />
                           </div>

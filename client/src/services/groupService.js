@@ -64,6 +64,24 @@ const groupService = {
       return { ok: false, data: { message: "Lỗi kết nối" } };
     }
   },
+
+  createBill: async (payload) => {
+    try {
+      const res = await fetch(`${API_URL}/groups/bills/create`, {
+        // Đảm bảo đúng route backend
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối" } };
+    }
+  },
 };
 
 export default groupService;
