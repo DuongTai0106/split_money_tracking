@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import sendEmail from "../utils/sendEmail.js";
 import verifyAccountEmail from "../utils/verifyAccountEmail.js"
+import { cloudinary } from "../config/cloudinary.js";
+import {getPublicIdFromUrl} from "../utils/cloudinaryHelper.js"
 
 const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
@@ -179,16 +181,113 @@ export const logout = (req, res) => {
 };
 
 export const getProfile = async (req, res) => {
+  const client = await pool.connect();
   try {
-    // Token sẽ được middleware check trước khi vào đây
-    const userId = req.user.id;
-    const user = await pool.query(
-      "SELECT user_id, username, email FROM users WHERE user_id = $1",
+    const userId = req.user.user_id || req.user.id;
+    const result = await client.query(
+      "SELECT user_id, username, email, avatar_url, created_at FROM users WHERE user_id = $1",
       [userId]
     );
-    res.json({ user: user.rows[0] });
-  } catch (err) {
-    res.status(500).json({ message: "Server Error" });
+
+    if (result.rows.length === 0)
+      return res.status(404).json({ message: "User not found" });
+
+    res.json({ success: true, user: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ message: "Lỗi server" });
+  } finally {
+    client.release();
+  }
+};
+
+// 2. Cập nhật Profile (Avatar + Username)
+export const updateProfile = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user.user_id || req.user.id;
+    const { username } = req.body;
+    let newAvatarUrl = null;
+
+    // Nếu có file ảnh gửi lên
+    if (req.file) {
+      newAvatarUrl = req.file.path;
+
+      // Tìm ảnh cũ để xóa trên Cloudinary
+      const oldUserRes = await client.query(
+        "SELECT avatar_url FROM users WHERE user_id = $1",
+        [userId]
+      );
+      const oldUrl = oldUserRes.rows[0]?.avatar_url;
+
+      if (oldUrl) {
+        const publicId = getPublicIdFromUrl(oldUrl);
+        if (publicId) cloudinary.uploader.destroy(publicId);
+      }
+    }
+
+    // Tạo câu query động
+    let query = "UPDATE users SET username = $1";
+    let params = [username];
+
+    if (newAvatarUrl) {
+      query += ", avatar_url = $2 WHERE user_id = $3 RETURNING *";
+      params.push(newAvatarUrl, userId);
+    } else {
+      query += " WHERE user_id = $2 RETURNING *";
+      params.push(userId);
+    }
+
+    const result = await client.query(query, params);
+
+    res.json({
+      success: true,
+      message: "Cập nhật hồ sơ thành công",
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Lỗi cập nhật hồ sơ" });
+  } finally {
+    client.release();
+  }
+};
+
+// 3. Đổi Mật Khẩu
+export const changePassword = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const userId = req.user.user_id || req.user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    // Lấy mật khẩu cũ trong DB
+    const userRes = await client.query(
+      "SELECT password_hash FROM users WHERE user_id = $1",
+      [userId]
+    );
+    const user = userRes.rows[0];
+
+    // So sánh mật khẩu cũ
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Mật khẩu hiện tại không đúng" });
+    }
+
+    // Hash mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update DB
+    await client.query(
+      "UPDATE users SET password_hash = $1 WHERE user_id = $2",
+      [hashedPassword, userId]
+    );
+
+    res.json({ success: true, message: "Đổi mật khẩu thành công" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Lỗi server" });
+  } finally {
+    client.release();
   }
 };
 

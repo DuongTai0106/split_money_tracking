@@ -91,18 +91,6 @@ export const getMyGroups = async (req, res) => {
   }
 };
 
-// Helper: Format date sang "Hôm nay", "Hôm qua", "DD/MM/YYYY"
-// const formatDateGroup = (dateStr) => {
-//     const date = new Date(dateStr);
-//     const today = new Date();
-//     const yesterday = new Date(today);
-//     yesterday.setDate(yesterday.getDate() - 1);
-
-//     if (date.toDateString() === today.toDateString()) return "Hôm nay";
-//     if (date.toDateString() === yesterday.toDateString()) return "Hôm qua";
-//     return date.toLocaleDateString('vi-VN');
-// };
-
 export const getGroupDetails = async (req, res) => {
   const client = await pool.connect();
   try {
@@ -330,6 +318,60 @@ const generateInviteCode = () => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
+export const settleDebt = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { groupId, receiverId, amount } = req.body;
+    const payerId = req.user.user_id || req.user.id; // Người bấm nút thanh toán là người trả
+
+    if (!groupId || !receiverId || !amount) {
+      return res.status(400).json({ message: "Thiếu thông tin thanh toán" });
+    }
+
+    await client.query("BEGIN");
+
+    // 1. Tạo Bill loại 'settlement'
+    // Title sẽ là: "Thanh toán nợ"
+    const billQuery = `
+      INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
+      VALUES ($1, $2, $3, $4, 'settlement', NOW())
+      RETURNING id
+    `;
+    // Lưu ý: amount phải là số dương
+    const absAmount = Math.abs(amount);
+
+    // Tên hiển thị ví dụ: "Thanh toán tiền"
+    const billRes = await client.query(billQuery, [
+      groupId,
+      payerId,
+      "Thanh toán nợ",
+      absAmount,
+    ]);
+    const newBillId = billRes.rows[0].id;
+
+    // 2. Tạo Bill Detail
+    // Người nhận tiền (receiverId) sẽ được ghi vào bill_details
+    const detailQuery = `
+      INSERT INTO bill_details (bill_id, user_id, amount)
+      VALUES ($1, $2, $3)
+    `;
+    await client.query(detailQuery, [newBillId, receiverId, absAmount]);
+
+    await client.query("COMMIT");
+
+    res.status(200).json({
+      success: true,
+      message: "Đã thanh toán thành công!",
+    });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Settle Debt Error:", error);
+    res.status(500).json({ message: "Lỗi server khi thanh toán" });
+  } finally {
+    client.release();
+  }
+};
+
 export const getGroupSettings = async (req, res) => {
   const client = await pool.connect();
   try {
@@ -434,6 +476,59 @@ export const updateGroup = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Lỗi cập nhật nhóm" });
+  } finally {
+    client.release();
+  }
+};
+
+export const joinGroupByCode = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { inviteCode } = req.body;
+    const userId = req.user.user_id || req.user.id;
+
+    if (!inviteCode) {
+      return res.status(400).json({ message: "Vui lòng nhập mã nhóm" });
+    }
+
+    // 1. Tìm nhóm dựa trên mã mời
+    // Lưu ý: So sánh invite_code (có thể cần UPPERCASE để không phân biệt hoa thường)
+    const findGroupQuery = `SELECT id, name FROM groups WHERE UPPER(invite_code) = UPPER($1)`;
+    const groupRes = await client.query(findGroupQuery, [inviteCode]);
+
+    if (groupRes.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "Mã nhóm không hợp lệ hoặc không tồn tại" });
+    }
+
+    const group = groupRes.rows[0];
+
+    // 2. Kiểm tra xem user đã là thành viên chưa
+    const checkMemberQuery = `SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2`;
+    const memberRes = await client.query(checkMemberQuery, [group.id, userId]);
+
+    if (memberRes.rows.length > 0) {
+      return res
+        .status(409)
+        .json({ message: "Bạn đã là thành viên của nhóm này rồi" });
+    }
+
+    // 3. Thêm user vào nhóm
+    const joinQuery = `
+      INSERT INTO group_members (group_id, user_id, role, joined_at)
+      VALUES ($1, $2, 'member', NOW())
+    `;
+    await client.query(joinQuery, [group.id, userId]);
+
+    res.status(200).json({
+      success: true,
+      message: `Đã tham gia nhóm "${group.name}" thành công!`,
+      groupId: group.id,
+    });
+  } catch (error) {
+    console.error("Join Group Error:", error);
+    res.status(500).json({ message: "Lỗi server" });
   } finally {
     client.release();
   }

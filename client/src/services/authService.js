@@ -120,6 +120,50 @@ const authService = {
       return { ok: false, data: { message: "Lỗi mạng" } };
     }
   },
+
+  getProfile: async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/profile`, {
+        method: "GET",
+        credentials: "include", // Gửi cookie xác thực
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối server" } };
+    }
+  },
+
+  updateProfile: async (formData) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/profile`, {
+        method: "PUT",
+        credentials: "include",
+        body: formData,
+        // LƯU Ý: Không set 'Content-Type': 'multipart/form-data' thủ công
+        // Fetch sẽ tự động làm việc đó kèm theo boundary khi body là FormData
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối server" } };
+    }
+  },
+
+  changePassword: async (currentPassword, newPassword) => {
+    try {
+      const res = await fetch(`${API_URL}/users/change-password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối server" } };
+    }
+  },
 };
 
 export default authService;

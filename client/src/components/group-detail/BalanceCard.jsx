@@ -1,7 +1,7 @@
 import React from "react";
 import { Wallet } from "lucide-react";
 
-const BalanceCard = ({ userBalance }) => {
+const BalanceCard = ({ userBalance, onViewAll }) => {
   const isPositive = userBalance.amount >= 0;
 
   return (
@@ -31,7 +31,10 @@ const BalanceCard = ({ userBalance }) => {
         <div className="mt-6 space-y-3">
           <div className="flex justify-between text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
             <span>Chi tiết nợ</span>
-            <button className="text-[#34d399] hover:underline">
+            <button
+              onClick={onViewAll}
+              className="text-[#34d399] hover:underline"
+            >
               Xem tất cả
             </button>
           </div>
@@ -53,22 +56,14 @@ const BalanceCard = ({ userBalance }) => {
                 className={item.amount > 0 ? "text-[#34d399]" : "text-red-400"}
               >
                 {item.amount > 0
-                  ? `Nợ bạn ${item.amount.toLocaleString()}k`
-                  : `Bạn nợ ${Math.abs(item.amount).toLocaleString()}k`}
+                  ? `Nợ bạn ${item.amount.toLocaleString()}đ`
+                  : `Bạn nợ ${Math.abs(item.amount).toLocaleString()}đ`}
               </span>
             </div>
           ))}
         </div>
 
         {/* Footer Actions */}
-        <div className="mt-6 pt-4 border-t border-[#2d4a3e] flex items-center justify-between">
-          <span className="text-xs text-gray-500">
-            Tổng chi: {userBalance.totalGroupSpend}
-          </span>
-          <button className="bg-[#34d399] text-[#0b1411] px-4 py-2 rounded-lg font-bold text-sm hover:bg-[#2cb683] transition-colors shadow-lg shadow-[#34d399]/20">
-            Thanh toán
-          </button>
-        </div>
       </div>
     </div>
   );

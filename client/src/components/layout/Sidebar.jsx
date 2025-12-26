@@ -1,52 +1,73 @@
-import React, { useEffect, useState } from "react";
-import { NavLink } from "react-router-dom";
+import React, { useEffect, useState, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom"; // <--- 1. Import useNavigate & useLocation
 import {
   Users,
   LogOut,
-  PlusCircle,
-  Settings,
   Home,
-  Activity,
   User,
   ChevronRight,
   ChevronLeft,
   X,
+  CreditCard,
+  Settings,
 } from "lucide-react";
 import authService from "../../services/authService";
 import { AnimatePresence, motion } from "framer-motion";
 
-const Sidebar = ({
-  onLogout,
-  onCreateGroup,
-  isMobileOpen,
-  setIsMobileOpen,
-  user
-}) => {
+const Sidebar = ({ onLogout, isMobileOpen, setIsMobileOpen, user }) => {
+  const navigate = useNavigate(); // <--- 2. Khởi tạo navigate
+  const location = useLocation(); // Để check active route
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // State cho Drop-up Menu
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 1024) {
         setIsMobile(true);
-        setIsCollapsed(false); // Mobile luôn full width khi mở
+        setIsCollapsed(false);
       } else {
         setIsMobile(false);
-        setIsMobileOpen(false); // Tắt mobile menu khi về desktop
+        setIsMobileOpen(false);
       }
     };
 
-    // Init check
     handleResize();
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, [setIsMobileOpen]);
 
+  const handleNavigate = (path) => {
+    navigate(path);
+    setIsMenuOpen(false); // Đóng menu drop-up
+    if (isMobile) setIsMobileOpen(false); // Đóng sidebar mobile
+  };
+
+  // --- HÀM XỬ LÝ CHUYỂN TRANG PROFILE ---
+  const handleProfileClick = () => {
+    navigate("/profile"); // Chuyển trang ngay lập tức
+    setIsMenuOpen(false); // Đóng menu dropdown
+    if (isMobile) setIsMobileOpen(false); // Đóng sidebar nếu đang ở mobile
+  };
+
   const navItems = [
-    { icon: Home, label: "Nhóm", active: true },
-    { icon: Users, label: "Bạn bè", active: false },
-    { icon: Activity, label: "Hoạt động", active: false },
-    { icon: User, label: "Hồ sơ", active: false },
+    { icon: Home, label: "Nhóm", path: "/groups" },
+    // { icon: Users, label: "Bạn bè", path: "/friends" },
+    // { icon: User, label: "Hồ sơ", path: "/profile" },
   ];
 
   const sidebarVariants = {
@@ -57,16 +78,13 @@ const Sidebar = ({
   };
 
   const handleLogout = async () => {
-    // 1. Gọi API để xóa cookie ở server
     await authService.logout();
-
-    // 2. Gọi hàm này để App.jsx set lại state user = null (về trang Login)
     onLogout();
   };
 
   const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {/* Header: Logo & Toggle Button */}
+    <div className="flex flex-col h-full relative">
+      {/* Header */}
       <div
         className={`flex items-center h-20 px-6 ${
           isCollapsed ? "justify-center" : "justify-between"
@@ -77,16 +95,19 @@ const Sidebar = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-2xl font-bold text-white tracking-tight whitespace-nowrap"
+            className="text-2xl font-bold text-white tracking-tight whitespace-nowrap cursor-pointer"
+            onClick={() => navigate("/")}
           >
             Split<span className="text-[#34d399]">Bill</span>
           </motion.h1>
         )}
 
-        {/* Toggle Button (Chỉ hiện trên Desktop) */}
         {!isMobile && (
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={() => {
+              setIsCollapsed(!isCollapsed);
+              setIsMenuOpen(false);
+            }}
             className="p-1.5 rounded-lg bg-[#1c2e26] text-gray-400 hover:text-white hover:bg-[#34d399] hover:text-[#0b1411] transition-all"
           >
             {isCollapsed ? (
@@ -97,7 +118,6 @@ const Sidebar = ({
           </button>
         )}
 
-        {/* Close Button (Chỉ hiện trên Mobile) */}
         {isMobile && (
           <button
             onClick={() => setIsMobileOpen(false)}
@@ -110,139 +130,172 @@ const Sidebar = ({
 
       {/* Navigation Links */}
       <nav className="flex-1 px-3 space-y-2 mt-4">
-        {navItems.map((item, index) => (
-          <motion.a
-            key={index}
-            href="#"
-            whileHover={{ backgroundColor: "#1c2e26", x: isCollapsed ? 0 : 4 }}
-            className={`
-              flex items-center py-3 rounded-xl transition-all duration-200 group relative
-              ${isCollapsed ? "justify-center px-2" : "px-4 gap-4"}
-              ${
-                item.active
-                  ? "bg-[#34d399] text-[#0b1411] font-semibold shadow-[0_0_15px_rgba(52,211,153,0.3)]"
-                  : "text-gray-400 hover:text-white"
-              }
-            `}
-          >
-            <item.icon
-              size={22}
-              className={`shrink-0 ${item.active ? "text-[#0b1411]" : ""}`}
-            />
+        {navItems.map((item, index) => {
+          // Logic check active chuẩn xác hơn
+          const isActive = location.pathname.startsWith(item.path);
 
-            {/* Text Label (Ẩn khi collapsed) */}
-            {!isCollapsed && (
-              <motion.span
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: "auto" }}
-                exit={{ opacity: 0, width: 0 }}
-                className="whitespace-nowrap overflow-hidden"
-              >
-                {item.label}
-              </motion.span>
-            )}
-
-            {/* Tooltip khi Collapsed (Hover mới hiện) */}
-            {isCollapsed && (
-              <div className="absolute left-full ml-4 px-2 py-1 bg-white text-[#0b1411] text-xs font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
-                {item.label}
-              </div>
-            )}
-          </motion.a>
-        ))}
+          return (
+            <div
+              key={index}
+              onClick={() => handleNavigate(item.path)}
+              className={`
+                flex items-center py-3 rounded-xl transition-all duration-200 group relative cursor-pointer
+                ${isCollapsed ? "justify-center px-2" : "px-4 gap-4"}
+                ${
+                  isActive
+                    ? "bg-[#34d399] text-[#0b1411] font-semibold shadow-[0_0_15px_rgba(52,211,153,0.3)]"
+                    : "text-gray-400 hover:text-white hover:bg-[#1c2e26]"
+                }
+              `}
+            >
+              <item.icon
+                size={22}
+                className={`shrink-0 ${isActive ? "text-[#0b1411]" : ""}`}
+              />
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: "auto" }}
+                  exit={{ opacity: 0, width: 0 }}
+                  className="whitespace-nowrap overflow-hidden"
+                >
+                  {item.label}
+                </motion.span>
+              )}
+              {isCollapsed && (
+                <div className="absolute left-full ml-4 px-2 py-1 bg-white text-[#0b1411] text-xs font-bold rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 shadow-lg">
+                  {item.label}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
-      {/* Footer: User Profile */}
-      <div
-        className={`p-4 border-t border-[#1c2e26] ${
-          isCollapsed ? "flex justify-center" : ""
-        }`}
-      >
+      {/* Footer: User Profile with Drop-up Menu */}
+      <div className={`p-4 border-t border-[#1c2e26] relative`} ref={menuRef}>
+        {/* --- DROP-UP MENU --- */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              key="profile-dropdown"
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className={`absolute bottom-full mb-3 bg-[#1c2e26] border border-[#2d4a3e] rounded-2xl shadow-2xl overflow-hidden z-50
+                ${isCollapsed ? "left-16 w-56" : "left-4 right-4"} 
+              `}
+            >
+              {isCollapsed && (
+                <div className="px-4 py-3 border-b border-[#2d4a3e] bg-[#0b1411]/50">
+                  <p className="text-sm font-bold text-white truncate">
+                    {user?.username || "User"}
+                  </p>
+                  <p className="text-xs text-gray-500">Free Plan</p>
+                </div>
+              )}
+
+              <div className="p-1.5 space-y-1">
+                {/* --- NÚT HỒ SƠ CÁ NHÂN (ĐÃ GẮN SỰ KIỆN onClick) --- */}
+                <button
+                  onClick={handleProfileClick} // <--- ĐÂY LÀ CHỖ QUAN TRỌNG NHẤT
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-[#2d4a3e] rounded-xl transition-colors text-left group"
+                >
+                  <div className="p-1.5 bg-[#0b1411] rounded-lg group-hover:bg-[#34d399] group-hover:text-[#0b1411] transition-colors">
+                    <User size={16} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-medium">Hồ sơ cá nhân</span>
+                    <span className="text-[10px] text-gray-500 group-hover:text-gray-300">
+                      Quản lý tài khoản
+                    </span>
+                  </div>
+                </button>
+
+                <div className="h-px bg-[#2d4a3e] my-1 mx-2"></div>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-red-400 hover:text-white hover:bg-red-500/10 rounded-xl transition-colors text-left group"
+                >
+                  <div className="p-1.5 bg-[#0b1411] rounded-lg group-hover:bg-red-500 group-hover:text-white transition-colors">
+                    <LogOut size={16} />
+                  </div>
+                  <span className="font-medium">Đăng xuất</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* --- USER PROFILE TRIGGER (Footer) --- */}
         <div
-          className={`flex items-center ${
-            isCollapsed ? "justify-center" : "gap-3"
-          } p-2 rounded-xl hover:bg-[#1c2e26] cursor-pointer transition-colors`}
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          className={`
+            flex items-center p-2 rounded-xl cursor-pointer transition-all duration-200 border border-transparent
+            ${
+              isMenuOpen
+                ? "bg-[#1c2e26] border-[#2d4a3e]"
+                : "hover:bg-[#1c2e26]"
+            }
+            ${isCollapsed ? "justify-center" : "gap-3"}
+          `}
         >
-          <div className="h-6 w-6 bg-indigo-500 rounded-full flex items-center justify-center text-white text-xs">
-            {/* Lấy ký tự đầu của tên để làm avatar */}
-            {user?.username?.charAt(0).toUpperCase() || "U"}
-          </div>
+          {/* Logic: Nếu có avatar_url thì hiện ảnh, không thì hiện chữ cái đầu */}
+          {user?.avatar_url ? (
+            <img
+              src={user.avatar_url}
+              alt={user.username}
+              className="h-8 w-8 lg:h-9 lg:w-9 rounded-full object-cover shadow-lg ring-2 ring-[#0b1411]"
+            />
+          ) : (
+            <div className="h-8 w-8 lg:h-9 lg:w-9 bg-gradient-to-br from-indigo-500 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg ring-2 ring-[#0b1411]">
+              {user?.username?.charAt(0).toUpperCase() || "U"}
+            </div>
+          )}
+
           {!isCollapsed && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="overflow-hidden"
+              className="overflow-hidden flex-1"
             >
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-sm font-bold text-white truncate">
                 {user?.username || "Người dùng"}
               </p>
-              <p className="text-xs text-gray-400">Free Plan</p>
+              <p className="text-xs text-[#34d399] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#34d399] animate-pulse"></span>
+                Online
+              </p>
             </motion.div>
           )}
+
           {!isCollapsed && (
-            <LogOut
-              size={18}
-              className="text-gray-500 ml-auto hover:text-red-400"
-              onClick={handleLogout}
-            />
+            <div
+              className={`text-gray-500 transition-transform duration-300 ${
+                isMenuOpen ? "rotate-180" : ""
+              }`}
+            >
+              <Settings size={18} />
+            </div>
           )}
         </div>
       </div>
     </div>
   );
 
-  // return (
-  //   <div className="w-64 h-screen bg-[#0b1411] border-r border-[#1c2e26] flex flex-col fixed left-0 top-0">
-  //     {/* Logo Area */}
-  //     <div className="p-8">
-  //       <h1 className="text-2xl font-bold text-white tracking-tight">
-  //         Split<span className="text-[#34d399]">Bill</span>
-  //       </h1>
-  //     </div>
-
-  //     {/* Navigation */}
-  //     <nav className="flex-1 px-4 space-y-2">
-  //       {navItems.map((item, index) => (
-  //         <motion.a
-  //           key={index}
-  //           href="#"
-  //           whileHover={{ x: 5 }}
-  //           className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 ${
-  //             item.active
-  //               ? "bg-[#34d399] text-[#0b1411] font-semibold shadow-[0_0_15px_rgba(52,211,153,0.3)]"
-  //               : "text-gray-400 hover:bg-[#1c2e26] hover:text-white"
-  //           }`}
-  //         >
-  //           <item.icon size={20} />
-  //           <span>{item.label}</span>
-  //         </motion.a>
-  //       ))}
-  //     </nav>
-
-  //     {/* User Mini Profile (Bottom Sidebar) */}
-  //     <div className="p-4 border-gray-100">
-  //       <button
-  //         onClick={handleLogout}
-  //         className="flex items-center gap-3 px-4 py-3 w-full text-gray-500 hover:text-white hover:bg-red-700 rounded-xl transition-all font-medium"
-  //       >
-  //         <LogOut className="h-5 w-5" /> Đăng xuất
-  //       </button>
-  //     </div>
-  //   </div>
-  // );
   return (
     <>
-      {/* 1. Desktop Sidebar (Cố định, đẩy nội dung) */}
       <motion.aside
         initial={false}
         animate={isCollapsed ? "collapsed" : "expanded"}
         variants={sidebarVariants}
-        className="hidden lg:flex flex-col h-screen bg-[#0b1411] border-r border-[#1c2e26] sticky top-0 z-40 overflow-hidden"
+        className="hidden lg:flex flex-col h-screen bg-[#0b1411] border-r border-[#1c2e26] sticky top-0 z-40"
       >
         <SidebarContent />
       </motion.aside>
 
-      {/* 2. Mobile Backdrop (Lớp phủ mờ) */}
       <AnimatePresence>
         {isMobile && isMobileOpen && (
           <motion.div
@@ -255,7 +308,6 @@ const Sidebar = ({
         )}
       </AnimatePresence>
 
-      {/* 3. Mobile Sidebar (Trượt ra từ trái) */}
       <AnimatePresence>
         {isMobile && isMobileOpen && (
           <motion.aside

@@ -19,6 +19,7 @@ import GroupList from "../components/dashboard/GroupList";
 import QuickActions from "../components/dashboard/QuickActions";
 import groupService from "../services/groupService";
 import toast from "react-hot-toast";
+import JoinGroupModal from "../components/modals/JoinGroupModal";
 import { useNavigate } from "react-router-dom";
 // --- MOCK DATA ---
 // const GROUPS = [
@@ -102,6 +103,7 @@ const GroupItem = ({ group, onClick }) => (
 );
 const Home = ({ user }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [groups, setGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
@@ -176,7 +178,11 @@ const Home = ({ user }) => {
           {/* Đây là điểm mấu chốt để giống hình mẫu mobile bạn gửi */}
           <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-4 h-full">
             <QuickActions icon={QrCode} label="Quét QR" />
-            <QuickActions icon={Keyboard} label="Nhập mã" />
+            <QuickActions
+              icon={Keyboard}
+              label="Nhập mã"
+              onClick={() => setIsJoinModalOpen(true)}
+            />
           </div>
         </div>
 
@@ -257,6 +263,11 @@ const Home = ({ user }) => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onGroupCreated={fetchGroups}
+      />
+      <JoinGroupModal
+        isOpen={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+        onJoinSuccess={fetchGroups}
       />
     </div>
   );

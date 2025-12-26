@@ -11,12 +11,14 @@ import TabNavigation from "../components/group-detail/TabNavigation";
 import ExpenseList from "../components/group-detail/ExpenseList";
 import CreateExpenseModal from "../components/modals/CreateExpenseModal";
 import groupService from "../services/groupService";
+import DebtDetailsModal from "../components/modals/DebtDetailsModal";
 
 const GroupDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Chi tiêu");
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [isDebtModalOpen, setIsDebtModalOpen] = useState(false);
 
   // State cho dữ liệu
   const [loading, setLoading] = useState(true);
@@ -89,7 +91,10 @@ const GroupDetail = () => {
             <GroupHeader groupInfo={groupData} />
 
             <div className="mt-6 mb-8 lg:mb-0">
-              <BalanceCard userBalance={balanceData} />
+              <BalanceCard
+                userBalance={balanceData}
+                onViewAll={() => setIsDebtModalOpen(true)}
+              />
             </div>
           </div>
 
@@ -149,6 +154,19 @@ const GroupDetail = () => {
           setIsExpenseModalOpen(false);
         }}
       />
+
+      {balanceData && (
+        <DebtDetailsModal
+          isOpen={isDebtModalOpen}
+          onClose={() => setIsDebtModalOpen(false)}
+          details={balanceData.details} // Danh sách nợ lấy từ API
+          groupId={id}
+          onSuccess={() => {
+            // Khi thanh toán xong, reload lại data
+            fetchGroupDetails();
+          }}
+        />
+      )}
     </div>
   );
 };
