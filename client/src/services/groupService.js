@@ -143,6 +143,37 @@ const groupService = {
       return { ok: false, data: { message: "Lỗi kết nối" } };
     }
   },
+
+  deleteGroup: async (groupId) => {
+    try {
+      const res = await fetch(`${API_URL}/groups/${groupId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include", // Quan trọng: Để gửi kèm cookie/token xác thực người dùng
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      console.error("Delete Group Error:", error);
+      return { ok: false, data: { message: "Lỗi kết nối server" } };
+    }
+  },
+
+  getDashboardStats: async () => {
+    try {
+      const res = await fetch(`${API_URL}/groups/dashboard/stats`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối" } };
+    }
+  },
 };
 
 export default groupService;

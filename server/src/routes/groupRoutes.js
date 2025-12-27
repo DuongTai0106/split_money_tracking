@@ -3,6 +3,8 @@ import verifyToken from "../middlewares/authMiddleware.js";
 import {
   createBill,
   createGroup,
+  deleteGroup,
+  getDashboardStats,
   getGroupDetails,
   getMyGroups,
   joinGroupByCode,
@@ -31,5 +33,7 @@ router.post("/settle", verifyToken, settleDebt);
 router.get("/:id/settings", verifyToken, getGroupSettings);
 router.put("/:id", verifyToken, upload.single("groupImage"), updateGroup);
 router.post("/join", verifyToken, joinGroupByCode);
+router.delete("/:id", verifyToken, deleteGroup);
+router.get("/dashboard/stats", verifyToken, getDashboardStats);
 
 export default router;

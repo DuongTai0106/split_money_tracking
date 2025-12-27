@@ -16,7 +16,7 @@ const GroupSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // State lưu toàn bộ thông tin settings
+  // State lưu thông tin nhóm
   const [groupInfo, setGroupInfo] = useState({
     name: "",
     image: "",
@@ -25,28 +25,49 @@ const GroupSettings = () => {
     end_date: "",
     invite_code: "",
     members: [],
+    created_by: "null", // Để so sánh
   });
 
-  // State riêng cho file ảnh mới (nếu user đổi ảnh)
+  // State xác định xem user hiện tại có phải chủ nhóm không
+  const [isCreator, setIsCreator] = useState(false);
+
   const [selectedFile, setSelectedFile] = useState(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
-      const res = await groupService.getGroupSettings(id);
-      if (res.ok && res.data.success) {
-        const data = res.data.data;
-        // Format date để hiện lên input type="date"
-        setGroupInfo({
-          ...data,
-          start_date: data.start_date ? data.start_date.split("T")[0] : "",
-          end_date: data.end_date ? data.end_date.split("T")[0] : "",
-        });
-      } else {
-        toast.error("Không thể tải cài đặt nhóm");
-        navigate(-1);
+      try {
+        const res = await groupService.getGroupSettings(id);
+
+        if (res.ok && res.data.success) {
+          const data = res.data.data;
+          const serverCurrentUserId = res.data.currentUserId; // Lấy ID từ backend trả về
+          console.log("Server User ID:", serverCurrentUserId);
+          console.log("Group Creator ID:", data.created_by);
+          setGroupInfo({
+            ...data,
+            start_date: data.start_date ? data.start_date.split("T")[0] : "",
+            end_date: data.end_date ? data.end_date.split("T")[0] : "",
+          });
+
+          // SO SÁNH QUYỀN CHỦ NHÓM TẠI ĐÂY
+          // Ép kiểu String để đảm bảo chính xác (vd: "1" == 1)
+          if (String(serverCurrentUserId) === String(data.created_by)) {
+            setIsCreator(true);
+          } else {
+            setIsCreator(false);
+          }
+        } else {
+          toast.error("Không thể tải cài đặt nhóm");
+          navigate(-1);
+        }
+      } catch (error) {
+        console.error(error);
+        toast.error("Lỗi kết nối");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
+
     fetchSettings();
   }, [id, navigate]);
 
@@ -66,11 +87,10 @@ const GroupSettings = () => {
       const res = await groupService.updateGroup(id, formData);
       if (res.ok && res.data.success) {
         toast.success("Cập nhật thành công!");
-        // Cập nhật lại state nếu có ảnh mới trả về từ server
         if (res.data.image) {
           setGroupInfo((prev) => ({ ...prev, image: res.data.image }));
         }
-        navigate(-1);
+        // navigate(-1); // Có thể giữ lại trang này thay vì back
       } else {
         toast.error("Cập nhật thất bại");
       }
@@ -120,10 +140,11 @@ const GroupSettings = () => {
             <InfoSection
               groupInfo={groupInfo}
               setGroupInfo={setGroupInfo}
-              setSelectedFile={setSelectedFile} // Truyền setter xuống để lấy file
+              setSelectedFile={setSelectedFile}
             />
             <div className="hidden lg:block">
-              <DangerZone />
+              {/* Truyền biến isCreator đã tính toán vào */}
+              <DangerZone groupId={id} isCreator={isCreator} />
             </div>
           </div>
 
@@ -135,7 +156,7 @@ const GroupSettings = () => {
               groupName={groupInfo.name}
             />
             <div className="lg:hidden pt-4">
-              <DangerZone />
+              <DangerZone groupId={id} isCreator={isCreator} />
             </div>
           </div>
         </div>

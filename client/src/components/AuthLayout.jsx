@@ -14,13 +14,8 @@ const AuthLayout = ({ children, title, subtitle }) => {
             transition={{ duration: 0.5 }}
           >
             <div className="flex items-center gap-2 mb-8">
-              {/* Logo Box: Đổi sang màu xanh lá sáng */}
-              <div className="h-8 w-8 bg-[#34d399] rounded-lg flex items-center justify-center text-[#0b1411] font-bold">
-                P
-              </div>
-              {/* Tên Brand: Màu trắng */}
-              <span className="text-xl font-bold text-white tracking-tight">
-                PERN Stack
+              <span className="font-bold text-4xl">
+                Split<span className="text-[#34d399]">Bill</span>
               </span>
             </div>
 

@@ -15,12 +15,13 @@ import {
 // Import Modal
 import CreateGroupModal from "../components/modals/CreateGroupModal";
 import HeroCard from "../components/dashboard/HeroCard";
+import DebtOverview from "../components/dashboard/DebtOverview";
 import GroupList from "../components/dashboard/GroupList";
 import QuickActions from "../components/dashboard/QuickActions";
 import groupService from "../services/groupService";
 import toast from "react-hot-toast";
 import JoinGroupModal from "../components/modals/JoinGroupModal";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 // --- MOCK DATA ---
 // const GROUPS = [
 //   {
@@ -106,32 +107,44 @@ const Home = ({ user }) => {
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [groups, setGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [overviewData, setOverviewData] = useState({
+    totalBalance: 0,
+    details: [],
+  });
   const navigate = useNavigate();
-  const fetchGroups = async () => {
+  const location = useLocation();
+  const fetchData = async () => {
+    setIsLoading(true);
     try {
-      const res = await groupService.getMyGroups();
-      if (res.ok && res.data.success) {
-        setGroups(res.data.groups);
-      } else {
-        toast.error("Lỗi tải nhóm");
-        console.error("Lỗi tải nhóm: ", res.data.message);
+      // Gọi song song 2 API cho nhanh
+      const [groupsRes, statsRes] = await Promise.all([
+        groupService.getMyGroups(),
+        groupService.getDashboardStats(),
+      ]);
+
+      if (groupsRes.ok && groupsRes.data.success) {
+        setGroups(groupsRes.data.groups);
+      }
+
+      if (statsRes.ok && statsRes.data.success) {
+        setOverviewData(statsRes.data.data);
       }
     } catch (error) {
-      toast.error(error.message);
-      console.error("Failed to fetch groups", error);
+      console.error(error);
+      toast.error("Lỗi tải dữ liệu");
     } finally {
       setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, [location]);
+
   const handleGroupClick = (groupId) => {
     // Giả sử đường dẫn của bạn là /groups/:id/details
     navigate(`/groups/${groupId}`);
   };
-
-  useEffect(() => {
-    fetchGroups();
-  }, []);
 
   return (
     <div className="min-h-screen bg-[#0b1411] font-sans text-white pb-20 lg:pb-0">
@@ -149,11 +162,6 @@ const Home = ({ user }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="p-2.5 bg-[#1c2e26] rounded-xl text-gray-400 hover:text-white hover:bg-[#233930] transition-colors relative border border-[#2d4a3e]">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-[#1c2e26]"></span>
-            </button>
-
             {/* Nút Tạo nhóm: Ở Mobile chỉ hiện Icon +, Desktop hiện cả chữ */}
             <motion.button
               whileTap={{ scale: 0.95 }}
@@ -171,12 +179,15 @@ const Home = ({ user }) => {
         <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Hero Card: Mobile (Full width) | Desktop (Chiếm 2/3) */}
           <div className="w-full lg:col-span-2">
-            <HeroCard />
+            <DebtOverview
+              totalBalance={overviewData.totalBalance}
+              details={overviewData.details}
+            />
           </div>
 
           {/* Quick Actions: Mobile (Row 3 cột) | Desktop (Column 1 cột) */}
           {/* Đây là điểm mấu chốt để giống hình mẫu mobile bạn gửi */}
-          <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-4 h-full">
+          <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:gap-4 h-full ">
             <QuickActions icon={QrCode} label="Quét QR" />
             <QuickActions
               icon={Keyboard}
@@ -262,12 +273,12 @@ const Home = ({ user }) => {
       <CreateGroupModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onGroupCreated={fetchGroups}
+        onGroupCreated={fetchData}
       />
       <JoinGroupModal
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
-        onJoinSuccess={fetchGroups}
+        onJoinSuccess={fetchData}
       />
     </div>
   );

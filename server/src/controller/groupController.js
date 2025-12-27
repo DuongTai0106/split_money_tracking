@@ -256,47 +256,230 @@ export const getGroupDetails = async (req, res) => {
   }
 };
 
+// export const createBill = async (req, res) => {
+//   const client = await pool.connect();
+
+//   try {
+//     const { groupId, title, amount, category, splitDetails } = req.body;
+//     // splitDetails là mảng: [{ user_id: 1, amount: 50000 }, { user_id: 2, amount: 50000 }]
+//     const payerId = req.user.user_id || req.user.id; // Người tạo bill là người trả tiền (mặc định)
+
+//     // Validate cơ bản
+//     if (!groupId || !amount || !title) {
+//       return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+//     }
+
+//     await client.query("BEGIN"); // Bắt đầu transaction
+
+//     // 1. Tạo Bill
+//     const billQuery = `
+//       INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
+//       VALUES ($1, $2, $3, $4, $5, NOW())
+//       RETURNING id
+//     `;
+//     const billRes = await client.query(billQuery, [
+//       groupId,
+//       payerId,
+//       title,
+//       amount,
+//       category,
+//     ]);
+//     const billId = billRes.rows[0].id;
+
+//     // 2. Tạo Bill Details (Vòng lặp insert từng người)
+//     // Lưu ý: splitDetails phải được tính toán chuẩn từ Frontend gửi lên
+//     for (const detail of splitDetails) {
+//       const detailQuery = `
+//         INSERT INTO bill_details (bill_id, user_id, amount)
+//         VALUES ($1, $2, $3)
+//       `;
+//       await client.query(detailQuery, [billId, detail.user_id, detail.amount]);
+//     }
+
+//     await client.query("COMMIT"); // Lưu tất cả nếu không có lỗi
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Tạo hóa đơn thành công",
+//       billId: billId,
+//     });
+//   } catch (error) {
+//     await client.query("ROLLBACK"); // Hủy hết nếu có lỗi
+//     console.error("Create Bill Error:", error);
+//     res
+//       .status(500)
+//       .json({ message: "Lỗi server khi tạo hóa đơn", error: error.message });
+//   } finally {
+//     client.release();
+//   }
+// };
+
+// export const createBill = async (req, res) => {
+//   const client = await pool.connect();
+
+//   try {
+//     // 1. Lấy thêm payer_id từ frontend gửi lên
+//     const { groupId, title, amount, category, splitDetails, payer_id } =
+//       req.body;
+
+//     // Logic xác định người trả tiền:
+//     // - Nếu frontend gửi payer_id thì dùng nó.
+//     // - Nếu không (hoặc null), fallback về người đang login (req.user.id).
+//     const creatorId = req.user.user_id || req.user.id;
+//     const finalPayerId = payer_id || creatorId;
+
+//     // Validate cơ bản
+//     if (!groupId || !amount || !title) {
+//       return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
+//     }
+
+//     if (!splitDetails || splitDetails.length === 0) {
+//       return res.status(400).json({ message: "Danh sách chia tiền trống" });
+//     }
+
+//     await client.query("BEGIN"); // Bắt đầu transaction
+
+//     // ---------------------------------------------------------
+//     // BƯỚC 1: Tạo Bill (Hóa đơn tổng)
+//     // Lưu ý: payer_id ở đây là người thực sự bỏ tiền ra
+//     // ---------------------------------------------------------
+//     const billQuery = `
+//       INSERT INTO bills (group_id, payer_id, title, amount, category, created_by, created_at)
+//       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+//       RETURNING id
+//     `;
+//     const billRes = await client.query(billQuery, [
+//       groupId,
+//       finalPayerId, // Người trả tiền (được chọn từ dropdown)
+//       title,
+//       amount,
+//       category,
+//       creatorId, // Người tạo đơn (để log lịch sử ai là người nhập liệu)
+//     ]);
+//     const billId = billRes.rows[0].id;
+
+//     // ---------------------------------------------------------
+//     // BƯỚC 2: Xử lý chi tiết & Tạo Nợ (Core Logic)
+//     // ---------------------------------------------------------
+//     for (const detail of splitDetails) {
+//       // 2.1. Lưu vào bill_details (Để biết ai tham gia vào bill này)
+//       const detailQuery = `
+//         INSERT INTO bill_details (bill_id, user_id, amount)
+//         VALUES ($1, $2, $3)
+//       `;
+//       await client.query(detailQuery, [billId, detail.user_id, detail.amount]);
+
+//       // 2.2. TẠO GHI CHÚ NỢ (QUAN TRỌNG)
+//       // Logic: Nếu người tham gia (detail.user_id) KHÁC người trả tiền (finalPayerId)
+//       // => Người tham gia đang NỢ người trả tiền.
+//       if (String(detail.user_id) !== String(finalPayerId)) {
+//         const debtQuery = `
+//           INSERT INTO debts (group_id, creditor_id, debtor_id, amount, bill_id, status)
+//           VALUES ($1, $2, $3, $4, $5, 'unpaid')
+//         `;
+//         // creditor_id: Chủ nợ (Người trả tiền)
+//         // debtor_id: Con nợ (Người hưởng thụ)
+//         await client.query(debtQuery, [
+//           groupId,
+//           finalPayerId,
+//           detail.user_id,
+//           detail.amount,
+//           billId,
+//         ]);
+//       }
+//     }
+
+//     await client.query("COMMIT"); // Lưu tất cả
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Tạo hóa đơn thành công",
+//       billId: billId,
+//     });
+//   } catch (error) {
+//     await client.query("ROLLBACK"); // Hủy hết nếu có lỗi
+//     console.error("Create Bill Error:", error);
+//     res.status(500).json({
+//       message: "Lỗi server khi tạo hóa đơn",
+//       error: error.message,
+//     });
+//   } finally {
+//     client.release();
+//   }
+// };
+
 export const createBill = async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { groupId, title, amount, category, splitDetails } = req.body;
-    // splitDetails là mảng: [{ user_id: 1, amount: 50000 }, { user_id: 2, amount: 50000 }]
-    const payerId = req.user.user_id || req.user.id; // Người tạo bill là người trả tiền (mặc định)
+    // Lấy dữ liệu từ Frontend
+    const { groupId, title, amount, category, splitDetails, payer_id } =
+      req.body;
 
-    // Validate cơ bản
+    // 1. Xác định người trả tiền (Payer)
+    // Nếu frontend không gửi payer_id, mặc định lấy người đang login (req.user.user_id)
+    const currentUserId = req.user.user_id || req.user.id;
+    const finalPayerId = payer_id || currentUserId;
+
+    // Validate
     if (!groupId || !amount || !title) {
       return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
     }
+    if (!splitDetails || splitDetails.length === 0) {
+      return res.status(400).json({ message: "Danh sách chia tiền trống" });
+    }
 
-    await client.query("BEGIN"); // Bắt đầu transaction
+    await client.query("BEGIN"); // --- BẮT ĐẦU TRANSACTION ---
 
-    // 1. Tạo Bill
+    // ---------------------------------------------------------
+    // BƯỚC 1: Insert vào bảng 'bills'
+    // ---------------------------------------------------------
     const billQuery = `
-      INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
-      VALUES ($1, $2, $3, $4, $5, NOW())
+      INSERT INTO bills (group_id, payer_id, title, amount, category)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING id
     `;
     const billRes = await client.query(billQuery, [
       groupId,
-      payerId,
+      finalPayerId, // Người trả tiền thực tế
       title,
       amount,
-      category,
+      category || "general",
     ]);
     const billId = billRes.rows[0].id;
 
-    // 2. Tạo Bill Details (Vòng lặp insert từng người)
-    // Lưu ý: splitDetails phải được tính toán chuẩn từ Frontend gửi lên
+    // ---------------------------------------------------------
+    // BƯỚC 2: Insert chi tiết & Tạo nợ
+    // ---------------------------------------------------------
     for (const detail of splitDetails) {
+      // 2.1. Insert vào 'bill_details' (Lưu lịch sử chia tiền)
       const detailQuery = `
         INSERT INTO bill_details (bill_id, user_id, amount)
         VALUES ($1, $2, $3)
       `;
       await client.query(detailQuery, [billId, detail.user_id, detail.amount]);
+
+      // 2.2. Insert vào 'debts' (Quan trọng: Tạo sổ nợ)
+      // Logic: Chỉ tạo nợ nếu "Người hưởng thụ" KHÁC "Người trả tiền"
+      if (String(detail.user_id) !== String(finalPayerId)) {
+        const debtQuery = `
+          INSERT INTO debts (group_id, creditor_id, debtor_id, amount, bill_id, status)
+          VALUES ($1, $2, $3, $4, $5, 'unpaid')
+        `;
+
+        // creditor_id = finalPayerId (Chủ nợ)
+        // debtor_id   = detail.user_id (Con nợ)
+        await client.query(debtQuery, [
+          groupId,
+          finalPayerId,
+          detail.user_id,
+          detail.amount,
+          billId,
+        ]);
+      }
     }
 
-    await client.query("COMMIT"); // Lưu tất cả nếu không có lỗi
+    await client.query("COMMIT"); // --- LƯU THÀNH CÔNG ---
 
     res.status(201).json({
       success: true,
@@ -304,11 +487,12 @@ export const createBill = async (req, res) => {
       billId: billId,
     });
   } catch (error) {
-    await client.query("ROLLBACK"); // Hủy hết nếu có lỗi
+    await client.query("ROLLBACK"); // --- CÓ LỖI, HỦY HẾT ---
     console.error("Create Bill Error:", error);
-    res
-      .status(500)
-      .json({ message: "Lỗi server khi tạo hóa đơn", error: error.message });
+    res.status(500).json({
+      message: "Lỗi server khi tạo hóa đơn",
+      error: error.message,
+    });
   } finally {
     client.release();
   }
@@ -318,50 +502,150 @@ const generateInviteCode = () => {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 };
 
+// export const settleDebt = async (req, res) => {
+//   const client = await pool.connect();
+//   try {
+//     const { groupId, receiverId, amount } = req.body;
+//     const payerId = req.user.user_id || req.user.id; // Người bấm nút thanh toán là người trả
+
+//     if (!groupId || !receiverId || !amount) {
+//       return res.status(400).json({ message: "Thiếu thông tin thanh toán" });
+//     }
+
+//     await client.query("BEGIN");
+
+//     // 1. Tạo Bill loại 'settlement'
+//     // Title sẽ là: "Thanh toán nợ"
+//     const billQuery = `
+//       INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
+//       VALUES ($1, $2, $3, $4, 'settlement', NOW())
+//       RETURNING id
+//     `;
+//     // Lưu ý: amount phải là số dương
+//     const absAmount = Math.abs(amount);
+
+//     // Tên hiển thị ví dụ: "Thanh toán tiền"
+//     const billRes = await client.query(billQuery, [
+//       groupId,
+//       payerId,
+//       "Thanh toán nợ",
+//       absAmount,
+//     ]);
+//     const newBillId = billRes.rows[0].id;
+
+//     // 2. Tạo Bill Detail
+//     // Người nhận tiền (receiverId) sẽ được ghi vào bill_details
+//     const detailQuery = `
+//       INSERT INTO bill_details (bill_id, user_id, amount)
+//       VALUES ($1, $2, $3)
+//     `;
+//     await client.query(detailQuery, [newBillId, receiverId, absAmount]);
+
+//     await client.query("COMMIT");
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Đã thanh toán thành công!",
+//     });
+//   } catch (error) {
+//     await client.query("ROLLBACK");
+//     console.error("Settle Debt Error:", error);
+//     res.status(500).json({ message: "Lỗi server khi thanh toán" });
+//   } finally {
+//     client.release();
+//   }
+// };
 export const settleDebt = async (req, res) => {
   const client = await pool.connect();
   try {
     const { groupId, receiverId, amount } = req.body;
-    const payerId = req.user.user_id || req.user.id; // Người bấm nút thanh toán là người trả
+    const payerId = req.user.user_id || req.user.id; // Người trả tiền
 
     if (!groupId || !receiverId || !amount) {
       return res.status(400).json({ message: "Thiếu thông tin thanh toán" });
     }
 
+    const payAmount = parseFloat(amount); // Số tiền thực trả
+
     await client.query("BEGIN");
 
-    // 1. Tạo Bill loại 'settlement'
-    // Title sẽ là: "Thanh toán nợ"
+    // 1. Tạo Bill lịch sử (giữ nguyên logic cũ để lưu vết giao dịch)
     const billQuery = `
       INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
       VALUES ($1, $2, $3, $4, 'settlement', NOW())
       RETURNING id
     `;
-    // Lưu ý: amount phải là số dương
-    const absAmount = Math.abs(amount);
-
-    // Tên hiển thị ví dụ: "Thanh toán tiền"
     const billRes = await client.query(billQuery, [
       groupId,
       payerId,
       "Thanh toán nợ",
-      absAmount,
+      payAmount,
     ]);
     const newBillId = billRes.rows[0].id;
 
-    // 2. Tạo Bill Detail
-    // Người nhận tiền (receiverId) sẽ được ghi vào bill_details
+    // Tạo Bill Detail
     const detailQuery = `
       INSERT INTO bill_details (bill_id, user_id, amount)
       VALUES ($1, $2, $3)
     `;
-    await client.query(detailQuery, [newBillId, receiverId, absAmount]);
+    await client.query(detailQuery, [newBillId, receiverId, payAmount]);
+
+    // ------------------------------------------------------------------
+    // 2. XỬ LÝ GẠCH NỢ TRONG BẢNG DEBTS (PHẦN QUAN TRỌNG MỚI THÊM)
+    // ------------------------------------------------------------------
+
+    // Tìm tất cả khoản nợ mà Payer đang nợ Receiver trong nhóm này (status = unpaid)
+    // Sắp xếp theo cũ nhất trước để trả nợ cũ trước
+    const debtsQuery = `
+      SELECT id, amount 
+      FROM debts 
+      WHERE group_id = $1 
+        AND debtor_id = $2 
+        AND creditor_id = $3 
+        AND status = 'unpaid'
+      ORDER BY created_at ASC
+    `;
+    const debtsRes = await client.query(debtsQuery, [
+      groupId,
+      payerId,
+      receiverId,
+    ]);
+    const debts = debtsRes.rows;
+
+    let remainingMoney = payAmount;
+
+    for (const debt of debts) {
+      if (remainingMoney <= 0) break;
+
+      const debtAmount = parseFloat(debt.amount);
+
+      if (remainingMoney >= debtAmount) {
+        // Trường hợp 1: Tiền trả >= Tiền nợ này -> Xóa sổ khoản nợ này (status = paid)
+        await client.query(
+          `UPDATE debts SET status = 'paid', amount = 0 WHERE id = $1`,
+          [debt.id]
+        );
+        remainingMoney -= debtAmount;
+      } else {
+        // Trường hợp 2: Tiền trả < Tiền nợ -> Trừ bớt số tiền nợ, status vẫn là unpaid
+        const newDebtAmount = debtAmount - remainingMoney;
+        await client.query(`UPDATE debts SET amount = $1 WHERE id = $2`, [
+          newDebtAmount,
+          debt.id,
+        ]);
+        remainingMoney = 0;
+      }
+    }
+
+    // Lưu ý: Nếu remainingMoney vẫn còn dương (trả dư),
+    // bạn có thể chọn tạo một record debt ngược lại (Receiver nợ lại Payer),
+    // nhưng để đơn giản ta coi như đã gạch hết nợ cũ.
 
     await client.query("COMMIT");
 
     res.status(200).json({
       success: true,
-      message: "Đã thanh toán thành công!",
+      message: "Đã thanh toán và cập nhật dư nợ thành công!",
     });
   } catch (error) {
     await client.query("ROLLBACK");
@@ -425,6 +709,7 @@ export const getGroupSettings = async (req, res) => {
         image: group.image_url, // UI dùng 'image', DB dùng 'image_url'
         members,
       },
+      currentUserId: currentUserId,
     });
   } catch (error) {
     console.error(error);
@@ -528,6 +813,126 @@ export const joinGroupByCode = async (req, res) => {
     });
   } catch (error) {
     console.error("Join Group Error:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  } finally {
+    client.release();
+  }
+};
+
+// controllers/groupController.js
+
+export const deleteGroup = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params; // groupId
+    const currentUserId = req.user.user_id || req.user.id; // Lấy ID người đang request
+
+    // 1. Kiểm tra nhóm tồn tại và quyền sở hữu
+    const checkQuery = `SELECT id, created_by FROM groups WHERE id = $1`;
+    const checkRes = await client.query(checkQuery, [id]);
+
+    if (checkRes.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Nhóm không tồn tại",
+      });
+    }
+
+    const group = checkRes.rows[0];
+
+    // So sánh ID (ép về String để tránh lỗi khác kiểu dữ liệu int/string)
+    if (String(group.created_by) !== String(currentUserId)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Bạn không có quyền giải tán nhóm này (Chỉ chủ nhóm mới được xóa)",
+      });
+    }
+
+    // 2. Thực hiện xóa nhóm
+    // Nhờ cấu hình ON DELETE CASCADE ở Bước 1, lệnh này sẽ tự động:
+    // Xóa group -> Xóa group_members -> Xóa bills -> Xóa bill_details -> Xóa debts
+    const deleteQuery = `DELETE FROM groups WHERE id = $1`;
+    await client.query(deleteQuery, [id]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Giải tán nhóm thành công",
+      data: group,
+      currentUserId: currentUserId,
+    });
+  } catch (error) {
+    console.error("Delete Group Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server khi xóa nhóm",
+      error: error.message,
+    });
+  } finally {
+    client.release();
+  }
+};
+
+export const getDashboardStats = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const currentUserId = req.user.user_id || req.user.id;
+
+    // 1. Lấy danh sách chi tiết nợ (Ai nợ mình & Mình nợ ai)
+    // Chỉ lấy status = 'unpaid'
+    const query = `
+      SELECT 
+        d.id,
+        d.amount,
+        d.created_at,
+        g.name as group_name,
+        g.id as group_id,
+        -- Thông tin người liên quan (Partner)
+        CASE 
+          WHEN d.debtor_id = $1 THEN c.username -- Mình là con nợ -> Lấy tên chủ nợ
+          ELSE db.username                      -- Mình là chủ nợ -> Lấy tên con nợ
+        END as partner_name,
+        CASE 
+            WHEN d.debtor_id = $1 THEN c.avatar_url
+            ELSE db.avatar_url
+        END as partner_avatar,
+        -- Xác định loại nợ (owe: mình nợ, lend: người khác nợ mình)
+        CASE 
+          WHEN d.debtor_id = $1 THEN 'owe'
+          ELSE 'lend'
+        END as type
+      FROM debts d
+      JOIN groups g ON d.group_id = g.id
+      JOIN users c ON d.creditor_id = c.user_id -- Join để lấy thông tin chủ nợ
+      JOIN users db ON d.debtor_id = db.user_id -- Join để lấy thông tin con nợ
+      WHERE (d.debtor_id = $1 OR d.creditor_id = $1) 
+      AND d.status = 'unpaid'
+      ORDER BY d.created_at DESC
+    `;
+
+    const result = await client.query(query, [currentUserId]);
+    const details = result.rows;
+
+    // 2. Tính tổng số dư
+    let totalBalance = 0;
+    details.forEach((item) => {
+      const amount = parseFloat(item.amount);
+      if (item.type === "lend") {
+        totalBalance += amount; // Người ta nợ mình -> Dương
+      } else {
+        totalBalance -= amount; // Mình nợ người ta -> Âm
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        totalBalance, // Tổng tiền (Ví dụ: -50000 hoặc 200000)
+        details, // Danh sách chi tiết
+      },
+    });
+  } catch (error) {
+    console.error("Dashboard Stats Error:", error);
     res.status(500).json({ message: "Lỗi server" });
   } finally {
     client.release();

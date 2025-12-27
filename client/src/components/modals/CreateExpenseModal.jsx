@@ -1,14 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
   FileText,
   ScanLine,
-  Calendar,
   User,
   Check,
-  ChevronRight,
   Loader2,
+  ChevronDown,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import groupService from "../../services/groupService";
@@ -38,6 +37,7 @@ const CreateExpenseModal = ({
   onClose,
   groupId,
   members = [],
+  currentUserId, // Cần truyền ID của user đang đăng nhập vào để set mặc định
   onSuccess,
 }) => {
   // --- FORM STATE ---
@@ -46,27 +46,51 @@ const CreateExpenseModal = ({
   const [category, setCategory] = useState("food");
   const [loading, setLoading] = useState(false);
 
-  // Mặc định chọn tất cả thành viên trong nhóm
+  // State cho người trả tiền
+  const [payerId, setPayerId] = useState(null);
+  const [isPayerDropdownOpen, setIsPayerDropdownOpen] = useState(false);
+  const payerDropdownRef = useRef(null);
+
+  // State chọn thành viên chia tiền
   const [selectedMembers, setSelectedMembers] = useState([]);
 
-  // Reset form khi mở modal
+  // Reset form & Set Default
   useEffect(() => {
     if (isOpen) {
       setAmount("");
       setDescription("");
       setCategory("food");
-      // Khi mở modal, mặc định tick chọn tất cả member
+      setIsPayerDropdownOpen(false);
+
+      // Mặc định chọn tất cả member để chia tiền
       if (members.length > 0) {
         setSelectedMembers(members.map((m) => m.id));
+
+        // Mặc định người trả là currentUserId, nếu không có thì lấy người đầu tiên
+        const defaultPayer =
+          members.find((m) => m.id === currentUserId) || members[0];
+        setPayerId(defaultPayer ? defaultPayer.id : null);
       }
     }
-  }, [isOpen, members]);
+  }, [isOpen, members, currentUserId]);
+
+  // Click outside để đóng dropdown payer
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        payerDropdownRef.current &&
+        !payerDropdownRef.current.contains(event.target)
+      ) {
+        setIsPayerDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // --- LOGIC TÍNH TOÁN ---
   const rawAmount = parseCurrency(amount);
 
-  // Logic Chia đều (Equal Split)
-  // Nếu có người được chọn, chia đều. Nếu không, = 0
   const perPersonAmount =
     selectedMembers.length > 0
       ? Math.floor(rawAmount / selectedMembers.length)
@@ -92,25 +116,25 @@ const CreateExpenseModal = ({
     }
   };
 
+  // Helper lấy thông tin người trả hiện tại
+  const currentPayer = members.find((m) => m.id === payerId);
+
   // --- XỬ LÝ SUBMIT ---
   const handleSave = async () => {
-    // 1. Validate
     if (rawAmount <= 0) return toast.error("Vui lòng nhập số tiền!");
     if (!description.trim()) return toast.error("Vui lòng nhập mô tả!");
     if (selectedMembers.length === 0)
       return toast.error("Chọn ít nhất 1 người để chia tiền!");
+    if (!payerId) return toast.error("Vui lòng chọn người trả tiền!");
 
     setLoading(true);
 
-    // 2. Chuẩn bị payload gửi Backend
-    // Tạo mảng splitDetails: [{ user_id: 1, amount: 50000 }, ...]
+    // Tính toán chia lẻ
     const splitDetails = selectedMembers.map((memberId) => ({
       user_id: memberId,
-      amount: perPersonAmount, // Hiện tại đang làm logic chia đều đơn giản
+      amount: perPersonAmount,
     }));
 
-    // Xử lý số dư lẻ (nếu chia không hết). Ví dụ 100k chia 3 người = 33333. Dư 1 đồng.
-    // Cộng phần dư vào người đầu tiên hoặc người trả tiền (tuỳ logic, ở đây mình bỏ qua cho đơn giản hoặc bạn cộng vào item đầu)
     const totalSplit = perPersonAmount * selectedMembers.length;
     const remainder = rawAmount - totalSplit;
     if (remainder > 0 && splitDetails.length > 0) {
@@ -122,20 +146,22 @@ const CreateExpenseModal = ({
       title: description,
       amount: rawAmount,
       category: category,
+      payer_id: payerId, // Gửi người trả tiền lên backend
       splitDetails: splitDetails,
     };
 
-    // 3. Gọi API
     try {
       const res = await groupService.createBill(payload);
-      if (res.ok && res.data.success) {
+      if (res.data && res.data.success) {
+        // Kiểm tra structure response của bạn
         toast.success("Đã thêm hóa đơn!");
-        if (onSuccess) onSuccess(); // Callback để reload lại trang GroupDetail
+        if (onSuccess) onSuccess();
         onClose();
       } else {
         toast.error(res.data.message || "Lỗi khi lưu hóa đơn");
       }
     } catch (error) {
+      console.error(error);
       toast.error("Lỗi kết nối");
     } finally {
       setLoading(false);
@@ -237,17 +263,89 @@ const CreateExpenseModal = ({
                     ))}
                   </div>
 
-                  {/* Date & Payer (Static for now) */}
-                  <div className="bg-[#1c2e26] lg:bg-[#16261f] rounded-2xl border border-[#2d4a3e] p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-[#34d399]/10 rounded-lg text-[#34d399]">
-                        <User size={18} />
+                  {/* PAYER SELECTION (Người trả) */}
+                  <div ref={payerDropdownRef} className="relative">
+                    <div
+                      onClick={() =>
+                        setIsPayerDropdownOpen(!isPayerDropdownOpen)
+                      }
+                      className="bg-[#1c2e26] lg:bg-[#16261f] rounded-2xl border border-[#2d4a3e] p-4 flex items-center justify-between cursor-pointer hover:border-[#34d399]/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-[#34d399]/10 rounded-lg text-[#34d399]">
+                          <User size={18} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 mb-0.5">
+                            Người thanh toán
+                          </span>
+                          <span className="text-white text-sm font-bold flex items-center gap-2">
+                            {currentPayer
+                              ? currentPayer.name
+                              : "Chọn người trả"}
+                            {currentPayer &&
+                              currentPayer.id === currentUserId &&
+                              "(Bạn)"}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-white text-sm font-medium">
-                        Người trả: <span className="text-[#34d399]">Bạn</span>
-                      </span>
+                      <ChevronDown
+                        size={18}
+                        className={`text-gray-400 transition-transform ${
+                          isPayerDropdownOpen ? "rotate-180" : ""
+                        }`}
+                      />
                     </div>
-                    <span className="text-xs text-gray-500">Hôm nay</span>
+
+                    {/* Dropdown Menu */}
+                    <AnimatePresence>
+                      {isPayerDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute top-full left-0 right-0 mt-2 bg-[#16261f] border border-[#2d4a3e] rounded-xl shadow-xl z-20 max-h-60 overflow-y-auto custom-scrollbar"
+                        >
+                          {members.map((member) => (
+                            <div
+                              key={member.id}
+                              onClick={() => {
+                                setPayerId(member.id);
+                                setIsPayerDropdownOpen(false);
+                              }}
+                              className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-[#2d4a3e]/50 transition-colors ${
+                                payerId === member.id ? "bg-[#2d4a3e]" : ""
+                              }`}
+                            >
+                              <img
+                                src={
+                                  member.avatar ||
+                                  `https://ui-avatars.com/api/?name=${member.name}&background=random`
+                                }
+                                alt={member.name}
+                                className="w-8 h-8 rounded-full border border-gray-600"
+                              />
+                              <span
+                                className={`text-sm font-medium ${
+                                  payerId === member.id
+                                    ? "text-[#34d399]"
+                                    : "text-white"
+                                }`}
+                              >
+                                {member.name}{" "}
+                                {member.id === currentUserId && "(Bạn)"}
+                              </span>
+                              {payerId === member.id && (
+                                <Check
+                                  size={16}
+                                  className="text-[#34d399] ml-auto"
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 
@@ -270,10 +368,10 @@ const CreateExpenseModal = ({
                   {/* Summary */}
                   <div className="flex items-center justify-between bg-[#1c2e26] px-4 py-3 rounded-xl border border-[#2d4a3e]">
                     <div className="flex items-center gap-2 text-gray-400 text-xs">
-                      <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center text-[10px] text-black font-bold">
-                        i
-                      </div>
-                      Chia đều cho {selectedMembers.length} người
+                      <span className="bg-gray-700 px-1.5 py-0.5 rounded text-white font-mono">
+                        ÷ {selectedMembers.length}
+                      </span>
+                      người hưởng thụ
                     </div>
                     <span className="text-white font-bold font-mono">
                       {perPersonAmount.toLocaleString("vi-VN")}đ / người
@@ -308,7 +406,6 @@ const CreateExpenseModal = ({
                                     : "border-gray-600"
                                 }`}
                               />
-                              {/* Icon check nếu là mình (tuỳ logic) */}
                             </div>
                             <div>
                               <p
@@ -318,18 +415,21 @@ const CreateExpenseModal = ({
                               >
                                 {member.name}
                               </p>
-                              <p
-                                className={`text-xs ${
-                                  isSelected
-                                    ? "text-[#34d399]"
-                                    : "text-gray-600"
-                                }`}
-                              >
-                                {isSelected
-                                  ? perPersonAmount.toLocaleString("vi-VN") +
-                                    "đ"
-                                  : "0đ"}
-                              </p>
+                              {/* Logic hiển thị ai nợ ai */}
+                              {isSelected && (
+                                <p className="text-xs text-gray-500">
+                                  {payerId === member.id ? (
+                                    <span className="text-[#34d399]">
+                                      Đã trả {amount}đ
+                                    </span>
+                                  ) : (
+                                    <span>
+                                      Nợ {currentPayer?.name?.split(" ").pop()}:{" "}
+                                      {perPersonAmount.toLocaleString("vi-VN")}đ
+                                    </span>
+                                  )}
+                                </p>
+                              )}
                             </div>
                           </div>
 
