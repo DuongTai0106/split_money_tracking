@@ -1,68 +1,17 @@
-// src/pages/Home.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import {
-  Bell,
-  Plus,
-  QrCode,
-  Link as LinkIcon,
-  Keyboard,
-  ChevronRight,
-  Search,
-  Filter,
-} from "lucide-react";
+import { Plus, QrCode, Keyboard, ChevronRight, Search, X } from "lucide-react";
 
-// Import Modal
+// Import Modal & Components
 import CreateGroupModal from "../components/modals/CreateGroupModal";
-import HeroCard from "../components/dashboard/HeroCard";
 import DebtOverview from "../components/dashboard/DebtOverview";
-import GroupList from "../components/dashboard/GroupList";
 import QuickActions from "../components/dashboard/QuickActions";
 import groupService from "../services/groupService";
 import toast from "react-hot-toast";
 import JoinGroupModal from "../components/modals/JoinGroupModal";
 import { useNavigate, useLocation } from "react-router-dom";
-// --- MOCK DATA ---
-// const GROUPS = [
-//   {
-//     id: 1,
-//     name: "Chuyến đi Đà Lạt",
-//     status: "positive",
-//     amount: "500.000đ",
-//     time: "vừa xong",
-//     image:
-//       "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&auto=format&fit=crop&q=60",
-//   },
-//   {
-//     id: 2,
-//     name: "Tiền nhà trọ - T10",
-//     status: "negative",
-//     amount: "200.000đ",
-//     time: "2 ngày",
-//     image:
-//       "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&auto=format&fit=crop&q=60",
-//   },
-//   {
-//     id: 3,
-//     name: "Ăn trưa công ty",
-//     status: "neutral",
-//     amount: "Đã thanh toán",
-//     time: "1 tuần",
-//     image:
-//       "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&auto=format&fit=crop&q=60",
-//   },
-//   {
-//     id: 4,
-//     name: "Cafe Cuối Tuần",
-//     status: "neutral",
-//     amount: "Đã thanh toán",
-//     time: "1 tuần",
-//     image:
-//       "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=800&auto=format&fit=crop&q=60",
-//   },
-// ];
 
-// --- MAIN PAGE ---
+// --- SUB COMPONENTS ---
 const GroupItem = ({ group, onClick }) => (
   <motion.div
     layout
@@ -79,7 +28,6 @@ const GroupItem = ({ group, onClick }) => (
         className="w-full h-full object-cover"
       />
     </div>
-
     <div className="flex-1 min-w-0">
       <div className="flex justify-between items-start mb-1">
         <h3 className="text-white font-bold text-lg truncate pr-2">
@@ -89,36 +37,45 @@ const GroupItem = ({ group, onClick }) => (
           {group.time}
         </span>
       </div>
-
-      {/* Logic hiển thị tiền (Tạm thời là mock) */}
       <div className="text-sm font-medium text-gray-400">
         {group.member_count} thành viên
       </div>
     </div>
-
     <ChevronRight
       size={18}
       className="text-gray-600 group-hover:text-[#34d399] transition-colors"
     />
   </motion.div>
 );
+
 const Home = ({ user }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
   const [groups, setGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // State tìm kiếm
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+
   const [overviewData, setOverviewData] = useState({
     totalBalance: 0,
     details: [],
   });
+
   const navigate = useNavigate();
   const location = useLocation();
-  const fetchData = async () => {
-    setIsLoading(true);
+
+  // Hàm gọi API (có nhận tham số search)
+  const fetchData = async (query = "") => {
+    // Nếu là load lần đầu thì set loading toàn trang,
+    // nếu là search thì chỉ set loading nhẹ (có thể xử lý UI riêng nếu muốn)
+    if (!query) setIsLoading(true);
+    else setIsSearching(true);
+
     try {
-      // Gọi song song 2 API cho nhanh
       const [groupsRes, statsRes] = await Promise.all([
-        groupService.getMyGroups(),
+        groupService.getMyGroups(query), // Truyền query vào service
         groupService.getDashboardStats(),
       ]);
 
@@ -134,23 +91,34 @@ const Home = ({ user }) => {
       toast.error("Lỗi tải dữ liệu");
     } finally {
       setIsLoading(false);
+      setIsSearching(false);
     }
   };
 
+  // 1. Load dữ liệu lần đầu
   useEffect(() => {
     fetchData();
   }, [location]);
 
+  // 2. Logic Debounce cho Search
+  // Khi user gõ, đợi 500ms sau khi ngừng gõ mới gọi API
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      // Chỉ gọi search nếu searchTerm khác rỗng hoặc gọi lại list gốc nếu rỗng
+      fetchData(searchTerm);
+    }, 500);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchTerm]);
+
   const handleGroupClick = (groupId) => {
-    // Giả sử đường dẫn của bạn là /groups/:id/details
     navigate(`/groups/${groupId}`);
   };
 
   return (
     <div className="min-h-screen bg-[#0b1411] font-sans text-white pb-20 lg:pb-0">
-      {/* Container: Padding nhỏ ở mobile (p-4), lớn ở desktop (p-10) */}
       <div className="p-4 lg:p-10 max-w-7xl mx-auto space-y-6 lg:space-y-10">
-        {/* 1. Header Section */}
+        {/* HEADER */}
         <header className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
@@ -162,7 +130,6 @@ const Home = ({ user }) => {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Nút Tạo nhóm: Ở Mobile chỉ hiện Icon +, Desktop hiện cả chữ */}
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsCreateModalOpen(true)}
@@ -174,19 +141,14 @@ const Home = ({ user }) => {
           </div>
         </header>
 
-        {/* 2. Dashboard Area (Responsive Grid) */}
-        {/* Mobile: Flex Column (Xếp chồng) | Desktop: Grid 3 cột */}
+        {/* DASHBOARD OVERVIEW */}
         <div className="flex flex-col lg:grid lg:grid-cols-3 gap-4 lg:gap-6">
-          {/* Hero Card: Mobile (Full width) | Desktop (Chiếm 2/3) */}
           <div className="w-full lg:col-span-2">
             <DebtOverview
               totalBalance={overviewData.totalBalance}
               details={overviewData.details}
             />
           </div>
-
-          {/* Quick Actions: Mobile (Row 3 cột) | Desktop (Column 1 cột) */}
-          {/* Đây là điểm mấu chốt để giống hình mẫu mobile bạn gửi */}
           <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:gap-4 h-full ">
             <QuickActions icon={QrCode} label="Quét QR" />
             <QuickActions
@@ -197,47 +159,71 @@ const Home = ({ user }) => {
           </div>
         </div>
 
-        {/* 3. Group List Section */}
+        {/* GROUP LIST SECTION */}
         <section className="space-y-4">
-          <div className="flex justify-between items-end">
-            <h2 className="text-lg lg:text-xl font-bold text-white">
+          {/* TOOLBAR: Title & Search Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <h2 className="text-lg lg:text-xl font-bold text-white whitespace-nowrap">
               Nhóm của bạn
             </h2>
 
-            {/* Filter & Sort Tools */}
-            <div className="flex gap-2">
-              <button className="flex items-center gap-1 text-xs font-medium text-gray-400 bg-[#1c2e26] px-3 py-1.5 rounded-lg border border-[#2d4a3e]">
-                <Filter size={14} /> Lọc
-              </button>
-              <button className="text-[#34d399] text-sm font-semibold hover:underline">
-                Sắp xếp
-              </button>
+            {/* --- SEARCH BAR DESIGN MỚI --- */}
+            <div className="relative w-full md:max-w-xs group">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search
+                  size={18}
+                  className={`transition-colors ${
+                    isSearching
+                      ? "text-[#34d399]"
+                      : "text-gray-500 group-focus-within:text-[#34d399]"
+                  }`}
+                />
+              </div>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Tìm kiếm nhóm..."
+                className="block w-full pl-10 pr-10 py-2.5 bg-[#1c2e26] border border-[#2d4a3e] rounded-xl leading-5 text-gray-300 placeholder-gray-500 focus:outline-none focus:bg-[#16261f] focus:border-[#34d399] focus:ring-1 focus:ring-[#34d399] sm:text-sm transition-all shadow-sm"
+              />
+              {/* Nút xóa text Search */}
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-white"
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
+            {/* ----------------------------- */}
           </div>
 
-          {/* Search Bar Mobile (Optional - giúp UX tốt hơn) */}
-          <div className="relative lg:hidden">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 h-4 w-4" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm nhóm..."
-              className="w-full bg-[#1c2e26] border border-[#2d4a3e] rounded-xl pl-9 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#34d399]"
-            />
-          </div>
-
-          {/* Grid Layout: Mobile (1 cột) | Tablet (2 cột) | Desktop (3 cột) */}
-          {isLoading ? (
-            <div className="text-center text-gray-500 py-10">
+          {/* Grid Layout */}
+          {isLoading && !isSearching ? ( // Nếu đang load lần đầu
+            <div className="text-center text-gray-500 py-10 flex flex-col items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#34d399] mb-2"></div>
               Đang tải danh sách nhóm...
             </div>
           ) : groups.length === 0 ? (
-            <div className="text-center text-gray-500 py-10 border-2 border-dashed border-[#2d4a3e] rounded-2xl">
-              Bạn chưa tham gia nhóm nào. Hãy tạo nhóm mới!
+            <div className="text-center text-gray-500 py-10 border-2 border-dashed border-[#2d4a3e] rounded-2xl bg-[#1c2e26]/30">
+              {searchTerm ? (
+                <>
+                  <p>Không tìm thấy nhóm nào với từ khóa "{searchTerm}"</p>
+                  <button
+                    onClick={() => setSearchTerm("")}
+                    className="text-[#34d399] mt-2 text-sm hover:underline"
+                  >
+                    Xóa tìm kiếm
+                  </button>
+                </>
+              ) : (
+                "Bạn chưa tham gia nhóm nào. Hãy tạo nhóm mới!"
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6">
               {groups.map((group) => (
-                // Map dữ liệu từ API vào Component GroupItem
                 <GroupItem
                   onClick={() => handleGroupClick(group.id)}
                   key={group.id}
@@ -248,37 +234,45 @@ const Home = ({ user }) => {
                       group.image_url ||
                       "https://ui-avatars.com/api/?background=random&name=" +
                         group.name,
-                    status: group.status, // neutral/positive/negative
-                    amount: group.amount, // '0đ'
-                    time: group.time, // formatted date
+                    status: group.status,
+                    amount: group.amount,
+                    time: group.time,
                     member_count: group.member_count,
                   }}
                 />
               ))}
 
-              {/* Nút thêm nhóm dạng Card */}
-              <motion.div
-                onClick={() => setIsCreateModalOpen(true)}
-                className="hidden md:flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-[#2d4a3e] text-gray-500 cursor-pointer hover:border-[#34d399] hover:text-[#34d399] transition-colors min-h-[100px]" // Class cũ
-              >
-                <Plus size={24} />
-                <span className="mt-2 font-medium text-sm">Thêm nhóm khác</span>
-              </motion.div>
+              {/* Nút thêm nhóm dạng Card (chỉ hiện khi không search) */}
+              {!searchTerm && (
+                <motion.div
+                  onClick={() => setIsCreateModalOpen(true)}
+                  whileHover={{
+                    scale: 1.01,
+                    borderColor: "#34d399",
+                    color: "#34d399",
+                  }}
+                  className="hidden md:flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-[#2d4a3e] text-gray-500 cursor-pointer transition-all min-h-[100px]"
+                >
+                  <Plus size={24} />
+                  <span className="mt-2 font-medium text-sm">
+                    Thêm nhóm khác
+                  </span>
+                </motion.div>
+              )}
             </div>
           )}
         </section>
       </div>
 
-      {/* MODAL */}
       <CreateGroupModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onGroupCreated={fetchData}
+        onGroupCreated={() => fetchData("")} // Reset search khi tạo xong
       />
       <JoinGroupModal
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
-        onJoinSuccess={fetchData}
+        onJoinSuccess={() => fetchData("")}
       />
     </div>
   );

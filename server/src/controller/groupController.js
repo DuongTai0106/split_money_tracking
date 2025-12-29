@@ -59,28 +59,68 @@ export const createGroup = async (req, res) => {
   }
 };
 
+// export const getMyGroups = async (req, res) => {
+//   try {
+//     const userId = req.user.id;
+
+//     // Query lấy nhóm mà user tham gia + đếm số thành viên
+//     const query = `
+//       SELECT g.*
+//       FROM groups g
+//       JOIN group_members gm ON g.id = gm.group_id
+//       WHERE gm.user_id = $1
+//       ORDER BY g.created_at DESC
+//     `;
+
+//     const result = await pool.query(query, [userId]);
+
+//     // Note: Phần tính toán số dư (positive/negative) khá phức tạp,
+//     // tạm thời trả về 0 hoặc dummy data. Logic tính tiền sẽ làm ở phần Expenses sau.
+//     const formattedGroups = result.rows.map((group) => ({
+//       ...group,
+//       status: "neutral",
+//       amount: "0đ",
+//       // member_count đã có sẵn trong row rồi
+//       time: new Date(group.created_at).toLocaleDateString("vi-VN"),
+//     }));
+
+//     res.status(200).json({ success: true, groups: formattedGroups });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ success: false, message: "Lỗi Server" });
+//   }
+// };
 export const getMyGroups = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.user_id || req.user.id;
+    const { search } = req.query; // 1. Lấy từ khóa search từ URL query (?search=...)
 
-    // Query lấy nhóm mà user tham gia + đếm số thành viên
-    const query = `
+    // 2. Xây dựng câu query cơ bản
+    let queryText = `
       SELECT g.*
       FROM groups g
       JOIN group_members gm ON g.id = gm.group_id
       WHERE gm.user_id = $1
-      ORDER BY g.created_at DESC
     `;
 
-    const result = await pool.query(query, [userId]);
+    const queryParams = [userId];
 
-    // Note: Phần tính toán số dư (positive/negative) khá phức tạp,
-    // tạm thời trả về 0 hoặc dummy data. Logic tính tiền sẽ làm ở phần Expenses sau.
+    // 3. Nếu có search, thêm điều kiện vào WHERE
+    if (search && search.trim() !== "") {
+      queryText += ` AND g.name ILIKE $2`; // ILIKE để tìm không phân biệt hoa thường
+      queryParams.push(`%${search.trim()}%`); // Thêm % để tìm kiếm tương đối
+    }
+
+    // 4. Thêm sắp xếp
+    queryText += ` ORDER BY g.created_at DESC`;
+
+    const result = await pool.query(queryText, queryParams);
+
     const formattedGroups = result.rows.map((group) => ({
       ...group,
+      // Logic status/amount tạm thời mock hoặc tính toán sau
       status: "neutral",
       amount: "0đ",
-      // member_count đã có sẵn trong row rồi
       time: new Date(group.created_at).toLocaleDateString("vi-VN"),
     }));
 

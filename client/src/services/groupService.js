@@ -1,11 +1,15 @@
 const API_URL = import.meta.env.VITE_API_URL;
 const groupService = {
   // 1. Lấy danh sách nhóm của tôi
-  getMyGroups: async () => {
+  getMyGroups: async (search = "") => {
     try {
-      // Giả sử backend có endpoint này (chúng ta sẽ cần viết thêm ở backend nếu chưa có)
-      // Hiện tại ta dùng tạm logic lấy list thành viên để filter, hoặc viết endpoint riêng
-      const res = await fetch(`${API_URL}/groups/my-groups`, {
+      // Tạo query string: /groups/my-groups?search=keyword
+      const url = new URL(`${API_URL}/groups/my-groups`);
+      if (search) {
+        url.searchParams.append("search", search);
+      }
+
+      const res = await fetch(url.toString(), {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
