@@ -521,6 +521,18 @@ export const createBill = async (req, res) => {
 
     await client.query("COMMIT"); // --- LƯU THÀNH CÔNG ---
 
+    // Socket.IO: Emit event to all users in the group
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`group_${groupId}`).emit("group-updated", {
+        type: "NEW_EXPENSE",
+        billId: billId,
+        payerId: finalPayerId,
+        amount: amount,
+      });
+      console.log(`Emitted group-updated for group_${groupId}`);
+    }
+
     res.status(201).json({
       success: true,
       message: "Tạo hóa đơn thành công",
@@ -682,6 +694,17 @@ export const settleDebt = async (req, res) => {
     // nhưng để đơn giản ta coi như đã gạch hết nợ cũ.
 
     await client.query("COMMIT");
+
+    // Socket.IO: Emit event to update balances
+    const io = req.app.get("io");
+    if (io) {
+      io.to(`group_${groupId}`).emit("group-updated", {
+        type: "DEBT_SETTLED",
+        payerId,
+        receiverId,
+        amount: payAmount,
+      });
+    }
 
     res.status(200).json({
       success: true,

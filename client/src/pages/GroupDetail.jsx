@@ -12,6 +12,7 @@ import ExpenseList from "../components/group-detail/ExpenseList";
 import CreateExpenseModal from "../components/modals/CreateExpenseModal";
 import groupService from "../services/groupService";
 import DebtDetailsModal from "../components/modals/DebtDetailsModal";
+import { io } from "socket.io-client";
 
 const GroupDetail = () => {
   const { id } = useParams();
@@ -46,8 +47,30 @@ const GroupDetail = () => {
     }
   };
 
+
+
   useEffect(() => {
     fetchGroupDetails();
+
+    // Socket.IO Setup
+    const newSocket = io(import.meta.env.VITE_API_URL, {
+        withCredentials: true,
+    });
+
+    newSocket.on("connect", () => {
+      console.log("Connected to socket server");
+      newSocket.emit("join-group", id);
+    });
+
+    newSocket.on("group-updated", (data) => {
+      console.log("Receive group update:", data);
+      toast.success("Dữ liệu đã được cập nhật!");
+      fetchGroupDetails();
+    });
+
+    return () => {
+      newSocket.disconnect();
+    };
   }, [id]);
 
   // Loading UI
