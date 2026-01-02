@@ -9,6 +9,8 @@ import QuickActions from "../components/dashboard/QuickActions";
 import groupService from "../services/groupService";
 import toast from "react-hot-toast";
 import JoinGroupModal from "../components/modals/JoinGroupModal";
+import QRScannerModal from "../components/modals/QRScannerModal";
+import JoinGroupConfirmModal from "../components/modals/JoinGroupConfirmModal";
 import { useNavigate, useLocation } from "react-router-dom";
 
 // --- SUB COMPONENTS ---
@@ -63,6 +65,29 @@ const Home = ({ user }) => {
     details: [],
   });
 
+  // QR Functionality State
+  const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [scannedGroupInfo, setScannedGroupInfo] = useState(null);
+  const [isJoining, setIsJoining] = useState(false); // Loading khi join
+  const [scannedCode, setScannedCode] = useState("");
+
+  // Check if Mobile
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent =
+        navigator.userAgent || navigator.vendor || window.opera;
+      if (/android/i.test(userAgent) || /iPad|iPhone|iPod/.test(userAgent)) {
+        setIsMobile(true);
+      } else {
+        setIsMobile(false);
+      }
+    };
+    checkMobile();
+  }, []);
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -115,6 +140,49 @@ const Home = ({ user }) => {
     navigate(`/groups/${groupId}`);
   };
 
+  // --- QR HANDLERS ---
+  const handleScanSuccess = async (code) => {
+    // Gọi API preview
+    const loadingToast = toast.loading("Đang tìm nhóm...");
+    setIsQRScannerOpen(false);
+
+    try {
+      const res = await groupService.getGroupByCode(code);
+      toast.dismiss(loadingToast);
+
+      if (res.ok && res.data.success) {
+        setScannedGroupInfo(res.data.group);
+        setScannedCode(code); // Lưu code để join
+        setIsConfirmModalOpen(true);
+      } else {
+        toast.error(res.data.message || "Không tìm thấy nhóm");
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error("Lỗi khi quét mã");
+    }
+  };
+
+  const handleConfirmJoin = async () => {
+    if (!scannedCode) return;
+    setIsJoining(true);
+    try {
+        const res = await groupService.joinGroup(scannedCode);
+        if (res.ok && res.data.success) {
+            toast.success(res.data.message);
+            fetchData(""); // Refresh list
+            setIsConfirmModalOpen(false);
+        } else {
+            toast.error(res.data.message || "Lỗi khi tham gia");
+        }
+    } catch (error) {
+        toast.error("Lỗi kết nối");
+    } finally {
+        setIsJoining(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-[#0b1411] font-sans text-white pb-20 lg:pb-0">
       <div className="p-4 lg:p-10 max-w-7xl mx-auto space-y-6 lg:space-y-10">
@@ -150,7 +218,15 @@ const Home = ({ user }) => {
             />
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-1 gap-3 lg:gap-4 h-full ">
-            <QuickActions icon={QrCode} label="Quét QR" />
+            <QuickActions 
+                icon={QrCode} 
+                label="Quét QR" 
+                onClick={() => {
+                    if (isMobile) setIsQRScannerOpen(true);
+                    else toast.error("Chức năng chỉ dành cho điện thoại")
+                }}
+                disabled={!isMobile} 
+            />
             <QuickActions
               icon={Keyboard}
               label="Nhập mã"
@@ -273,6 +349,20 @@ const Home = ({ user }) => {
         isOpen={isJoinModalOpen}
         onClose={() => setIsJoinModalOpen(false)}
         onJoinSuccess={() => fetchData("")}
+      />
+
+       {/* QR MODALS */}
+       <QRScannerModal
+        isOpen={isQRScannerOpen}
+        onClose={() => setIsQRScannerOpen(false)}
+        onScanSuccess={handleScanSuccess}
+      />
+      <JoinGroupConfirmModal
+        isOpen={isConfirmModalOpen}
+        onClose={() => setIsConfirmModalOpen(false)}
+        groupInfo={scannedGroupInfo}
+        onConfirm={handleConfirmJoin}
+        loading={isJoining}
       />
     </div>
   );

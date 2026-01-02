@@ -14,21 +14,41 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
 // Middlewares
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  })
-);
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Permit requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    const allowedDomains = [
+      "http://localhost:5173",
+      /loca\.lt$/,
+      /serveo\.net$/,
+      /serveousercontent\.com$/,
+      /localhost\.run$/,
+      /ngrok-free\.app$/
+    ];
+
+    const isAllowed = allowedDomains.some((pattern) => {
+      if (pattern instanceof RegExp) return pattern.test(origin);
+      return pattern === origin;
+    });
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+};
+
+app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(express.json());
 
 // Socket.IO Setup
 const io = new Server(server, {
-  cors: {
-    origin: "http://localhost:5173",
-    credentials: true,
-  },
+  cors: corsOptions,
 });
 
 io.on("connection", (socket) => {

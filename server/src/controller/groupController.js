@@ -882,6 +882,38 @@ export const joinGroupByCode = async (req, res) => {
   }
 };
 
+export const getGroupByInviteCode = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { code } = req.params;
+
+    if (!code) {
+      return res.status(400).json({ message: "Mã mời không hợp lệ" });
+    }
+
+    const query = `
+      SELECT id, name, image_url, member_count 
+      FROM groups 
+      WHERE UPPER(invite_code) = UPPER($1)
+    `;
+    const result = await client.query(query, [code]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Không tìm thấy nhóm" });
+    }
+
+    res.json({
+      success: true,
+      group: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Get Group By Code Error:", error);
+    res.status(500).json({ message: "Lỗi server" });
+  } finally {
+    client.release();
+  }
+};
+
 // controllers/groupController.js
 
 export const deleteGroup = async (req, res) => {

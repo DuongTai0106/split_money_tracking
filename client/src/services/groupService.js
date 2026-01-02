@@ -131,6 +131,20 @@ const groupService = {
     }
   },
 
+  getGroupByCode: async (code) => {
+    try {
+      const res = await fetch(`${API_URL}/groups/join/preview/${code}`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await res.json();
+      return { ok: res.ok, data };
+    } catch (error) {
+      return { ok: false, data: { message: "Lỗi kết nối" } };
+    }
+  },
+
   settleUp: async (payload) => {
     try {
       const res = await fetch(`${API_URL}/groups/settle`, {

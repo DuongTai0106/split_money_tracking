@@ -9,6 +9,7 @@ import {
   getMyGroups,
   joinGroupByCode,
   settleDebt,
+  getGroupByInviteCode,
 } from "../controller/groupController.js";
 import multer from "multer";
 import { storage } from "../config/cloudinary.js";

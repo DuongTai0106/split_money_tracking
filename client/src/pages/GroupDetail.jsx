@@ -95,9 +95,8 @@ const GroupDetail = () => {
         >
           <ArrowLeft size={22} className="text-gray-300" />
         </button>
-        <span className="font-bold text-lg lg:hidden opacity-0 animate-fadeIn">
-          Detail
-        </span>
+                <h1 className="text-lg font-bold">Thông tin nhóm</h1>
+
         <button
           onClick={() => navigate(`/groups/${id}/settings`)}
           className="p-2 -mr-2 rounded-full hover:bg-[#1c2e26] transition-colors"
