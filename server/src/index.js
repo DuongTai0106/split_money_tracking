@@ -25,7 +25,8 @@ const corsOptions = {
       /serveo\.net$/,
       /serveousercontent\.com$/,
       /localhost\.run$/,
-      /ngrok-free\.app$/
+      /ngrok-free\.app$/,
+      /vercel\.app$/
     ];
 
     const isAllowed = allowedDomains.some((pattern) => {
