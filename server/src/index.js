@@ -46,8 +46,16 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Explicitly handle Preflight
+app.options(/.*$/, cors(corsOptions));
+
 app.use(cookieParser());
 app.use(express.json());
+
+app.get("/ping", (req, res) => {
+  res.send("pong");
+});
 
 // Socket.IO Setup
 const io = new Server(server, {
