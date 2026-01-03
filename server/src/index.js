@@ -21,6 +21,7 @@ const corsOptions = {
 
     const allowedDomains = [
       "http://localhost:5173",
+      "https://split-money-tracking.vercel.app", // Explicitly add your Vercel domain
       /loca\.lt$/,
       /serveo\.net$/,
       /serveousercontent\.com$/,
@@ -37,6 +38,7 @@ const corsOptions = {
     if (isAllowed) {
       callback(null, true);
     } else {
+      console.log("Blocked by CORS:", origin); // Debug log
       callback(new Error('Not allowed by CORS'));
     }
   },
