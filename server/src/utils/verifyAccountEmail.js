@@ -47,10 +47,10 @@ const sendEmail = async (email, otp) => {
     console.log("[sendEmail] Sending mail now...");
     await transporter.sendMail(mailOptions);
     console.log("[sendEmail] Mail sent successfully via transporter.");
-    return true;
+    return { success: true };
   } catch (error) {
     console.error("Lỗi gửi email:", error);
-    return false;
+    return { success: false, error: error.message };
   }
 };
 

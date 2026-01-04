@@ -83,10 +83,13 @@ export const initRegister = async (req, res) => {
 
         // 4. Gửi Email
         console.log("[initRegister] Sending email...");
-        const emailSent = await verifyAccountEmail(email, otp);
-        if (!emailSent) {
-            console.log("[initRegister] Failed to send email.");
-            return res.status(500).json({ message: "Không thể gửi email. Vui lòng kiểm tra lại địa chỉ email." });
+        const emailResult = await verifyAccountEmail(email, otp);
+        
+        if (!emailResult.success) {
+            console.log("[initRegister] Failed to send email:", emailResult.error);
+            return res.status(500).json({ 
+                message: "Lỗi gửi email (Debug): " + emailResult.error 
+            });
         }
         console.log("[initRegister] Email sent successfully.");
 
