@@ -31,7 +31,7 @@ const corsOptions = {
     if (allowedOrigins.has(origin) || isVercelPreview) return cb(null, true);
 
     console.log("Blocked by CORS:", origin);
-    return cb(null, false); // ❗đừng cb(new Error(...)) vì sẽ trả response không có CORS header
+    return cb(null, false); 
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],

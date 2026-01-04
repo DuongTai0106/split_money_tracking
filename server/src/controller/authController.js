@@ -58,10 +58,13 @@ export const register = async (req, res) => {
 // --- API 1: KHỞI TẠO ĐĂNG KÝ (Gửi OTP) ---
 export const initRegister = async (req, res) => {
     const { email, username } = req.body;
+    console.log(`[initRegister] Request received for email: ${email}`);
     try {
+        console.log("[initRegister] Checking if email exists...");
         // 1. Kiểm tra xem Email đã có người dùng chưa (Quan trọng)
         const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (userCheck.rows.length > 0) {
+            console.log("[initRegister] Email already exists.");
             return res.status(409).json({ message: "Email này đã được sử dụng!" });
         }
 
@@ -70,17 +73,22 @@ export const initRegister = async (req, res) => {
         const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 phút
 
         // 3. Lưu OTP vào bảng tạm (Xóa OTP cũ của email này nếu có)
+        console.log("[initRegister] Saving OTP to DB...");
         await pool.query('DELETE FROM registration_otps WHERE email = $1', [email]);
         await pool.query(
             'INSERT INTO registration_otps (email, otp, expires_at) VALUES ($1, $2, $3)',
             [email, otp, expiresAt]
         );
+        console.log("[initRegister] OTP saved.");
 
         // 4. Gửi Email
+        console.log("[initRegister] Sending email...");
         const emailSent = await verifyAccountEmail(email, otp);
         if (!emailSent) {
+            console.log("[initRegister] Failed to send email.");
             return res.status(500).json({ message: "Không thể gửi email. Vui lòng kiểm tra lại địa chỉ email." });
         }
+        console.log("[initRegister] Email sent successfully.");
 
         res.json({ message: "Mã xác thực đã được gửi tới email của bạn" });
 

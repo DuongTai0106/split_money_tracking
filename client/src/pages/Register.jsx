@@ -74,10 +74,10 @@ const Register = () => {
     setIsLoading(false);
 
     if (result.ok) {
-      toast.success("Đăng ký thành công! Đang vào hệ thống...");
+      toast.success("Đăng ký thành công! Vui lòng đăng nhập để bắt đầu");
       // Reload trang hoặc redirect về Home (Vì Backend đã set cookie rồi)
       setTimeout(() => {
-        window.location.href = "/home"; // Load lại để App.jsx nhận cookie mới
+        window.location.href = "/groups"; // Load lại để App.jsx nhận cookie mới
       }, 1000);
     } else {
       toast.error(result.data.message);

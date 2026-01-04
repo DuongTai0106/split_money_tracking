@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const sendEmail = async (email, otp) => {
+  console.log(`[sendEmail] Preparing to send email to ${email}`);
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -10,6 +11,10 @@ const sendEmail = async (email, otp) => {
         user: process.env.EMAIL_USER, // Điền email của bạn vào .env
         pass: process.env.EMAIL_PASS, // Điền App Password vào .env
       },
+      // Add timeouts to prevent hanging indefinitely
+      connectionTimeout: 10000, 
+      greetingTimeout: 5000,
+      socketTimeout: 10000,
     });
 
     const mailOptions = {
@@ -27,7 +32,9 @@ const sendEmail = async (email, otp) => {
       `,
     };
 
+    console.log("[sendEmail] Sending mail now...");
     await transporter.sendMail(mailOptions);
+    console.log("[sendEmail] Mail sent successfully via transporter.");
     return true;
   } catch (error) {
     console.error("Lỗi gửi email:", error);
