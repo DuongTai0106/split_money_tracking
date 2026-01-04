@@ -4,17 +4,29 @@ dotenv.config();
 
 const sendEmail = async (email, otp) => {
   console.log(`[sendEmail] Preparing to send email to ${email}`);
+
+  // 0. Validate Env Vars
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.error("[sendEmail] MISSING ENV VARIABLES: EMAIL_USER or EMAIL_PASS is not set!");
+      return false;
+  }
+
   try {
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false, // true for 465, false for other ports
       auth: {
-        user: process.env.EMAIL_USER, // Điền email của bạn vào .env
-        pass: process.env.EMAIL_PASS, // Điền App Password vào .env
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
-      // Add timeouts to prevent hanging indefinitely
+      // Timeout settings
       connectionTimeout: 10000, 
       greetingTimeout: 5000,
       socketTimeout: 10000,
+      // Debug config for production
+      logger: true,
+      debug: true, 
     });
 
     const mailOptions = {
