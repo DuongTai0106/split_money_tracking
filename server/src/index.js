@@ -5,84 +5,57 @@ import cookieParser from "cookie-parser";
 import http from "http";
 import { Server } from "socket.io";
 import authRoutes from "./routes/auth.js";
-import groupRoutes from "./routes/groupRoutes.js"
+import groupRoutes from "./routes/groupRoutes.js";
 
 dotenv.config();
 
 const app = express();
+app.set("trust proxy", 1); // render/proxy (khuyến nghị)
+
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
-// Middlewares
+const allowedOrigins = new Set([
+  "http://localhost:5173",
+  "https://split-money-tracking.vercel.app",
+]);
+
 const corsOptions = {
-  origin: (origin, callback) => {
-    // Permit requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+  origin: (origin, cb) => {
+    // origin có thể undefined (curl/mobile)
+    if (!origin) return cb(null, true);
 
-    const allowedDomains = [
-      "http://localhost:5173",
-      "https://split-money-tracking.vercel.app", // Explicitly add your Vercel domain
-      /loca\.lt$/,
-      /serveo\.net$/,
-      /serveousercontent\.com$/,
-      /localhost\.run$/,
-      /ngrok-free\.app$/,
-      /vercel\.app$/
-    ];
+    // cho phép tất cả preview domain của Vercel: https://xxx.vercel.app
+    const isVercelPreview = /^https:\/\/.+\.vercel\.app$/.test(origin);
 
-    const isAllowed = allowedDomains.some((pattern) => {
-      if (pattern instanceof RegExp) return pattern.test(origin);
-      return pattern === origin;
-    });
+    if (allowedOrigins.has(origin) || isVercelPreview) return cb(null, true);
 
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      console.log("Blocked by CORS:", origin); // Debug log
-      callback(new Error('Not allowed by CORS'));
-    }
+    console.log("Blocked by CORS:", origin);
+    return cb(null, false); // ❗đừng cb(new Error(...)) vì sẽ trả response không có CORS header
   },
   credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
 };
 
 app.use(cors(corsOptions));
-
-// Explicitly handle Preflight
-app.options(/.*$/, cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
 app.use(cookieParser());
 app.use(express.json());
 
-app.get("/ping", (req, res) => {
-  res.send("pong");
-});
+app.get("/ping", (req, res) => res.send("pong"));
 
-// Socket.IO Setup
-const io = new Server(server, {
-  cors: corsOptions,
-});
+const io = new Server(server, { cors: corsOptions });
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
-
-  // Join group room
-  socket.on("join-group", (groupId) => {
-    socket.join(`group_${groupId}`);
-    console.log(`User ${socket.id} joined group_${groupId}`);
-  });
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
+  socket.on("join-group", (groupId) => socket.join(`group_${groupId}`));
 });
 
-// Store io instance to use in controllers
 app.set("io", io);
 
-// Routes
 app.use("/auth", authRoutes);
 app.use("/groups", groupRoutes);
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
