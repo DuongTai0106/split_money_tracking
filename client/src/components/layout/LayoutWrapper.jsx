@@ -32,19 +32,6 @@ const LayoutWrapper = ({ user, onLogout }) => {
               Split<span className="text-[#34d399]">Bill</span>
             </span>
           </div>
-
-          {/* Avatar Mobile */}
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 to-orange-500 overflow-hidden">
-            {/* Fallback nếu không có ảnh user */}
-            <img
-              src={
-                user?.avatar ||
-                "https://ui-avatars.com/api/?name=" + (user?.name || "User")
-              }
-              alt="User"
-              className="w-full h-full object-cover"
-            />
-          </div>
         </header>
 
         {/* MAIN CONTENT: Thay {children} bằng <Outlet /> */}
