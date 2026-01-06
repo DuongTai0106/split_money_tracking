@@ -10,13 +10,16 @@ const generateToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
 };
 
-const getCookieOptions = () => ({
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "none",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
-  path: "/",
-});
+const getCookieOptions = () => {
+    const isProduction = process.env.NODE_ENV === "production";
+    return {
+        httpOnly: true,
+        secure: isProduction, // True in Prod, False in Dev
+        sameSite: isProduction ? "none" : "lax", // 'None' requires secure:true. In dev (secure:false), use 'Lax'
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: "/",
+    };
+};
 
 export const register = async (req, res) => {
   const { username, email, password } = req.body;
@@ -39,14 +42,16 @@ export const register = async (req, res) => {
     );
 
     // 4. Tạo token
-    const token = jwt.sign(
-      { id: newUser.rows[0].user_id },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
+    const token = generateToken(newUser.rows[0].user_id);
+    
+    // 5. Set Cookie (Auto Login)
+    res.cookie('token', token, getCookieOptions());
+
+    // 6. Return response
+    const { password_hash, ...userInfo } = newUser.rows[0];
     res.json({
       token,
-      user: newUser.rows[0],
+      user: userInfo,
       message: "Register successfully",
     });
   } catch (err) {

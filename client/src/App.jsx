@@ -52,7 +52,7 @@ const AppRoutes = ({ user, setUser, handleLogout }) => {
         element={
           <PublicOnlyRoute user={user}>
             <PageTransition>
-              <Register />
+              <Register onLoginSuccess={setUser} />
             </PageTransition>
           </PublicOnlyRoute>
         }
@@ -89,7 +89,7 @@ const AppRoutes = ({ user, setUser, handleLogout }) => {
               path="/profile"
               element={
                 <PageTransition>
-                  <Profile />
+                  <Profile onUserUpdate={setUser} />
                 </PageTransition>
               }
             />
@@ -100,7 +100,7 @@ const AppRoutes = ({ user, setUser, handleLogout }) => {
             path="/groups/:id/details"
             element={
               <PageTransition>
-                <GroupDetail />
+                <GroupDetail user={user} />
               </PageTransition>
             }
           />

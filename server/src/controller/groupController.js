@@ -469,6 +469,17 @@ export const createBill = async (req, res) => {
       return res.status(400).json({ message: "Danh sách chia tiền trống" });
     }
 
+    // Validate Total Split matches Bill Amount (allow small drift < 100vnd)
+    const totalSplit = splitDetails.reduce(
+      (sum, item) => sum + parseFloat(item.amount),
+      0
+    );
+    if (Math.abs(totalSplit - amount) > 100) {
+      return res.status(400).json({
+        message: `Tổng tiền chia (${totalSplit}) không khớp hóa đơn (${amount})`,
+      });
+    }
+
     await client.query("BEGIN"); // --- BẮT ĐẦU TRANSACTION ---
 
     // ---------------------------------------------------------

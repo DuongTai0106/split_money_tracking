@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import userService from "../services/authService";
 
-const Profile = () => {
+const Profile = ({ onUserUpdate }) => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
@@ -81,10 +81,17 @@ const Profile = () => {
 
     const res = await userService.updateProfile(formData);
     if (res.ok) {
-      toast.success("Cập nhật hồ sơ thành công!");
-      // Có thể cập nhật lại Context User toàn cục ở đây nếu cần
+        toast.success("Cập nhật hồ sơ thành công!");
+        
+        // Update Local State for UI correctness
+        setProfile(res.data.user);
+        
+        // Update Global State immediately to refresh Sidebar
+        if (onUserUpdate) {
+            onUserUpdate(res.data.user);
+        }
     } else {
-      toast.error(res.message);
+        toast.error(res.message);
     }
     setSavingProfile(false);
   };

@@ -14,7 +14,7 @@ import groupService from "../services/groupService";
 import DebtDetailsModal from "../components/modals/DebtDetailsModal";
 import { io } from "socket.io-client";
 
-const GroupDetail = () => {
+const GroupDetail = ({ user }) => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Chi tiêu");
@@ -171,6 +171,7 @@ const GroupDetail = () => {
         onClose={() => setIsExpenseModalOpen(false)}
         groupId={id} // Truyền ID nhóm vào để tạo bill đúng nhóm
         members={groupData.members} // Truyền danh sách thành viên để chọn người split bill
+        currentUserId={user?.user_id || user?.id}
         onSuccess={() => {
           fetchGroupDetails(); // Reload lại dữ liệu sau khi tạo bill thành công
           setIsExpenseModalOpen(false);

@@ -37,7 +37,7 @@ const CreateExpenseModal = ({
   onClose,
   groupId,
   members = [],
-  currentUserId, // Cần truyền ID của user đang đăng nhập vào để set mặc định
+  currentUserId,
   onSuccess,
 }) => {
   // --- FORM STATE ---
@@ -46,13 +46,17 @@ const CreateExpenseModal = ({
   const [category, setCategory] = useState("food");
   const [loading, setLoading] = useState(false);
 
+  // Split Mode: 'equal' | 'amount'
+  const [splitMethod, setSplitMethod] = useState("equal");
+
   // State cho người trả tiền
   const [payerId, setPayerId] = useState(null);
   const [isPayerDropdownOpen, setIsPayerDropdownOpen] = useState(false);
   const payerDropdownRef = useRef(null);
 
-  // State chọn thành viên chia tiền
-  const [selectedMembers, setSelectedMembers] = useState([]);
+  // State chia tiền
+  const [selectedMembers, setSelectedMembers] = useState([]); // For Equal Mode
+  const [customAmounts, setCustomAmounts] = useState({}); // For Amount Mode: { userId: amount }
 
   // Reset form & Set Default
   useEffect(() => {
@@ -60,21 +64,23 @@ const CreateExpenseModal = ({
       setAmount("");
       setDescription("");
       setCategory("food");
+      setSplitMethod("equal");
       setIsPayerDropdownOpen(false);
+      setCustomAmounts({});
 
-      // Mặc định chọn tất cả member để chia tiền
+      // Mặc định chọn tất cả member
       if (members.length > 0) {
         setSelectedMembers(members.map((m) => m.id));
 
-        // Mặc định người trả là currentUserId, nếu không có thì lấy người đầu tiên
+        // Use weak comparison ==
         const defaultPayer =
-          members.find((m) => m.id === currentUserId) || members[0];
+          members.find((m) => m.id == currentUserId) || members[0];
         setPayerId(defaultPayer ? defaultPayer.id : null);
       }
     }
   }, [isOpen, members, currentUserId]);
 
-  // Click outside để đóng dropdown payer
+  // Click outside listener
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -91,16 +97,51 @@ const CreateExpenseModal = ({
   // --- LOGIC TÍNH TOÁN ---
   const rawAmount = parseCurrency(amount);
 
+  // Equal Mode Logic
   const perPersonAmount =
     selectedMembers.length > 0
       ? Math.floor(rawAmount / selectedMembers.length)
       : 0;
 
+  // Amount Mode Logic
+  const currentTotalCustom = Object.values(customAmounts).reduce(
+    (sum, val) => sum + val,
+    0
+  );
+  const remainingAmount = rawAmount - currentTotalCustom;
+
+  // --- HANDLERS ---
   const handleAmountChange = (e) => {
     setAmount(formatCurrency(e.target.value));
   };
 
+  const handleCustomAmountChange = (userId, value) => {
+    const numericValue = parseCurrency(value);
+    setCustomAmounts((prev) => ({
+      ...prev,
+      [userId]: numericValue,
+    }));
+  };
+
+  // Switch between modes Logic
+  const handleMethodChange = (method) => {
+    setSplitMethod(method);
+    if (method === "amount") {
+      // Pre-fill if needed, or keeping empty (here we set 0 to force user input)
+      // Or smart fill: Distribute equally as starting point
+      const initialAmounts = {};
+      members.forEach((m) => {
+        initialAmounts[m.id] = 0;
+      });
+      setCustomAmounts(initialAmounts);
+    } else {
+        // Reset to all selected when going back to equal
+        setSelectedMembers(members.map(m=>m.id));
+    }
+  };
+
   const toggleMember = (id) => {
+    if (splitMethod !== "equal") return; // Only toggle in equal mode
     if (selectedMembers.includes(id)) {
       setSelectedMembers(selectedMembers.filter((m) => m !== id));
     } else {
@@ -116,44 +157,57 @@ const CreateExpenseModal = ({
     }
   };
 
-  // Helper lấy thông tin người trả hiện tại
   const currentPayer = members.find((m) => m.id === payerId);
 
-  // --- XỬ LÝ SUBMIT ---
+  // --- SUBMIT ---
   const handleSave = async () => {
     if (rawAmount <= 0) return toast.error("Vui lòng nhập số tiền!");
     if (!description.trim()) return toast.error("Vui lòng nhập mô tả!");
-    if (selectedMembers.length === 0)
-      return toast.error("Chọn ít nhất 1 người để chia tiền!");
     if (!payerId) return toast.error("Vui lòng chọn người trả tiền!");
 
-    setLoading(true);
+    let splitDetails = [];
 
-    // Tính toán chia lẻ
-    const splitDetails = selectedMembers.map((memberId) => ({
-      user_id: memberId,
-      amount: perPersonAmount,
-    }));
+    if (splitMethod === "equal") {
+        if (selectedMembers.length === 0) return toast.error("Chọn ít nhất 1 người!");
+        
+        splitDetails = selectedMembers.map(uid => ({
+            user_id: uid,
+            amount: perPersonAmount
+        }));
+        // Fix rounding error
+        const totalSplit = perPersonAmount * selectedMembers.length;
+        const remainder = rawAmount - totalSplit;
+        if (remainder > 0 && splitDetails.length > 0) {
+            splitDetails[0].amount += remainder;
+        }
 
-    const totalSplit = perPersonAmount * selectedMembers.length;
-    const remainder = rawAmount - totalSplit;
-    if (remainder > 0 && splitDetails.length > 0) {
-      splitDetails[0].amount += remainder;
+    } else {
+        // Amount Mode
+        if (remainingAmount !== 0) return toast.error("Tổng chia chưa khớp với hóa đơn!");
+        
+        splitDetails = Object.entries(customAmounts)
+            .filter(([_, val]) => val > 0) // Only include users with > 0 amount
+            .map(([uid, val]) => ({
+                user_id: parseInt(uid), // Ensure ID is int if DB expects int
+                amount: val
+            }));
+            
+        if (splitDetails.length === 0) return toast.error("Vui lòng nhập số tiền cho thành viên!");
     }
 
+    setLoading(true);
     const payload = {
-      groupId: groupId,
+      groupId,
       title: description,
       amount: rawAmount,
-      category: category,
-      payer_id: payerId, // Gửi người trả tiền lên backend
-      splitDetails: splitDetails,
+      category,
+      payer_id: payerId,
+      splitDetails,
     };
 
     try {
       const res = await groupService.createBill(payload);
       if (res.data && res.data.success) {
-        // Kiểm tra structure response của bạn
         toast.success("Đã thêm hóa đơn!");
         if (onSuccess) onSuccess();
         onClose();
@@ -263,7 +317,7 @@ const CreateExpenseModal = ({
                     ))}
                   </div>
 
-                  {/* PAYER SELECTION (Người trả) */}
+                  {/* PAYER SELECTION */}
                   <div ref={payerDropdownRef} className="relative">
                     <div
                       onClick={() =>
@@ -280,12 +334,8 @@ const CreateExpenseModal = ({
                             Người thanh toán
                           </span>
                           <span className="text-white text-sm font-bold flex items-center gap-2">
-                            {currentPayer
-                              ? currentPayer.name
-                              : "Chọn người trả"}
-                            {currentPayer &&
-                              currentPayer.id === currentUserId &&
-                              "(Bạn)"}
+                            {currentPayer ? currentPayer.name : "Chọn người trả"}
+                            {currentPayer && currentPayer.id === currentUserId && " (Bạn)"}
                           </span>
                         </div>
                       </div>
@@ -297,7 +347,6 @@ const CreateExpenseModal = ({
                       />
                     </div>
 
-                    {/* Dropdown Menu */}
                     <AnimatePresence>
                       {isPayerDropdownOpen && (
                         <motion.div
@@ -336,10 +385,7 @@ const CreateExpenseModal = ({
                                 {member.id === currentUserId && "(Bạn)"}
                               </span>
                               {payerId === member.id && (
-                                <Check
-                                  size={16}
-                                  className="text-[#34d399] ml-auto"
-                                />
+                                <Check size={16} className="text-[#34d399] ml-auto" />
                               )}
                             </div>
                           ))}
@@ -351,102 +397,133 @@ const CreateExpenseModal = ({
 
                 {/* RIGHT: SPLIT LOGIC */}
                 <div className="p-4 space-y-4 lg:border-l lg:border-[#2d4a3e] lg:pl-8">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-bold text-lg">
-                      Chia cho ai?
-                    </h3>
+                  {/* SPLIT TABS */}
+                  <div className="flex bg-[#0b1411] p-1 rounded-xl border border-[#2d4a3e]">
                     <button
-                      onClick={toggleSelectAll}
-                      className="text-[#34d399] text-sm font-bold hover:underline"
+                        onClick={() => handleMethodChange("equal")}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                            splitMethod === "equal" ? "bg-[#34d399] text-[#0b1411]" : "text-gray-400 hover:text-white"
+                        }`}
                     >
-                      {selectedMembers.length === members.length
-                        ? "Bỏ chọn tất cả"
-                        : "Chọn tất cả"}
+                        Chia đều
+                    </button>
+                    <button
+                        onClick={() => handleMethodChange("amount")}
+                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                            splitMethod === "amount" ? "bg-[#34d399] text-[#0b1411]" : "text-gray-400 hover:text-white"
+                        }`}
+                    >
+                        Theo số tiền
                     </button>
                   </div>
 
-                  {/* Summary */}
-                  <div className="flex items-center justify-between bg-[#1c2e26] px-4 py-3 rounded-xl border border-[#2d4a3e]">
-                    <div className="flex items-center gap-2 text-gray-400 text-xs">
-                      <span className="bg-gray-700 px-1.5 py-0.5 rounded text-white font-mono">
-                        ÷ {selectedMembers.length}
-                      </span>
-                      người hưởng thụ
-                    </div>
-                    <span className="text-white font-bold font-mono">
-                      {perPersonAmount.toLocaleString("vi-VN")}đ / người
-                    </span>
-                  </div>
+                  {splitMethod === "equal" ? (
+                    // --- EQUAL MODE UI ---
+                    <>
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-white font-bold text-lg">Chia cho ai?</h3>
+                            <button onClick={toggleSelectAll} className="text-[#34d399] text-sm font-bold hover:underline">
+                                {selectedMembers.length === members.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+                            </button>
+                        </div>
+
+                         <div className="flex items-center justify-between bg-[#1c2e26] px-4 py-3 rounded-xl border border-[#2d4a3e]">
+                            <div className="flex items-center gap-2 text-gray-400 text-xs">
+                              <span className="bg-gray-700 px-1.5 py-0.5 rounded text-white font-mono">
+                                ÷ {selectedMembers.length}
+                              </span>
+                              người hưởng thụ
+                            </div>
+                            <span className="text-white font-bold font-mono">
+                              {perPersonAmount.toLocaleString("vi-VN")}đ / người
+                            </span>
+                          </div>
+                    </>
+                  ) : (
+                    // --- AMOUNT MODE UI ---
+                    <>
+                        <div className="flex flex-col gap-1 mb-2">
+                             <div className="flex justify-between items-center text-sm">
+                                <span className="text-gray-400">Đã nhập: <span className="text-white font-bold">{currentTotalCustom.toLocaleString()}đ</span></span>
+                                <span className={remainingAmount === 0 ? "text-[#34d399] font-bold" : "text-red-400 font-bold"}>
+                                    Còn lại: {remainingAmount.toLocaleString()}đ
+                                </span>
+                             </div>
+                             <div className="w-full h-1.5 bg-[#0b1411] rounded-full overflow-hidden">
+                                <motion.div 
+                                    className={`h-full ${remainingAmount === 0 ? "bg-[#34d399]" : "bg-red-500"}`}
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${Math.min((currentTotalCustom / (rawAmount || 1)) * 100, 100)}%` }}
+                                />
+                             </div>
+                        </div>
+                    </>
+                  )}
 
                   {/* Member List */}
                   <div className="space-y-3 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                     {members.map((member) => {
                       const isSelected = selectedMembers.includes(member.id);
-                      return (
-                        <div
-                          key={member.id}
-                          onClick={() => toggleMember(member.id)}
-                          className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
-                            isSelected
-                              ? "bg-[#16261f] border-[#34d399]/30"
-                              : "bg-[#0b1411] border-[#1c2e26] opacity-60"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="relative">
-                              <img
-                                src={
-                                  member.avatar ||
-                                  `https://ui-avatars.com/api/?name=${member.name}&background=random`
-                                }
-                                alt={member.name}
-                                className={`w-10 h-10 rounded-full border-2 ${
-                                  isSelected
-                                    ? "border-[#34d399]"
-                                    : "border-gray-600"
-                                }`}
-                              />
-                            </div>
-                            <div>
-                              <p
-                                className={`font-bold text-sm ${
-                                  isSelected ? "text-white" : "text-gray-400"
-                                }`}
-                              >
-                                {member.name}
-                              </p>
-                              {/* Logic hiển thị ai nợ ai */}
-                              {isSelected && (
-                                <p className="text-xs text-gray-500">
-                                  {payerId === member.id ? (
-                                    <span className="text-[#34d399]">
-                                      Đã trả {amount}đ
-                                    </span>
-                                  ) : (
-                                    <span>
-                                      Nợ {currentPayer?.name?.split(" ").pop()}:{" "}
-                                      {perPersonAmount.toLocaleString("vi-VN")}đ
-                                    </span>
+                      
+                      if (splitMethod === "equal") {
+                          // RENDER EQUAL ITEM
+                          return (
+                            <div
+                              key={member.id}
+                              onClick={() => toggleMember(member.id)}
+                              className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
+                                isSelected
+                                  ? "bg-[#16261f] border-[#34d399]/30"
+                                  : "bg-[#0b1411] border-[#1c2e26] opacity-60"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={member.avatar || `https://ui-avatars.com/api/?name=${member.name}&background=random`}
+                                  alt={member.name}
+                                  className={`w-10 h-10 rounded-full border-2 ${isSelected ? "border-[#34d399]" : "border-gray-600"}`}
+                                />
+                                <div>
+                                  <p className={`font-bold text-sm ${isSelected ? "text-white" : "text-gray-400"}`}>{member.name}</p>
+                                  {isSelected && (
+                                    <p className="text-xs text-gray-500">
+                                      {payerId === member.id ? <span className="text-[#34d399]">Đã trả {amount}đ</span> : <span>Nợ {currentPayer?.name?.split(" ").pop()}: {perPersonAmount.toLocaleString("vi-VN")}đ</span>}
+                                    </p>
                                   )}
-                                </p>
-                              )}
+                                </div>
+                              </div>
+                              <div className={`w-12 h-7 rounded-full flex items-center p-1 transition-colors duration-300 ${isSelected ? "bg-[#34d399]" : "bg-gray-600"}`}>
+                                <motion.div layout className="w-5 h-5 bg-white rounded-full shadow-md" style={{ marginLeft: isSelected ? "auto" : "0" }} />
+                              </div>
                             </div>
-                          </div>
-
-                          {/* Toggle Switch */}
-                          <div
-                            className={`w-12 h-7 rounded-full flex items-center p-1 transition-colors duration-300 ${
-                              isSelected ? "bg-[#34d399]" : "bg-gray-600"
-                            }`}
-                          >
-                            <motion.div
-                              layout
-                              className="w-5 h-5 bg-white rounded-full shadow-md"
-                              style={{ marginLeft: isSelected ? "auto" : "0" }}
-                            />
-                          </div>
-                        </div>
-                      );
+                          );
+                      } else {
+                          // RENDER AMOUNT INPUT ITEM
+                          return (
+                            <div
+                                key={member.id}
+                                className="flex items-center justify-between p-3 rounded-2xl border border-[#2d4a3e] bg-[#16261f]"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <img
+                                      src={member.avatar || `https://ui-avatars.com/api/?name=${member.name}&background=random`}
+                                      alt={member.name}
+                                      className="w-10 h-10 rounded-full border border-gray-600"
+                                    />
+                                    <p className="font-bold text-sm text-white">{member.name}</p>
+                                </div>
+                                <div className="relative w-32">
+                                    <input 
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={formatCurrency(customAmounts[member.id] || 0)}
+                                        onChange={(e) => handleCustomAmountChange(member.id, e.target.value)}
+                                        className="w-full bg-[#0b1411] border border-[#2d4a3e] rounded-lg px-3 py-1.5 text-right text-white font-mono focus:border-[#34d399] focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+                          );
+                      }
                     })}
                   </div>
                 </div>
