@@ -7,7 +7,7 @@ import { cloudinary } from "../config/cloudinary.js";
 import {getPublicIdFromUrl} from "../utils/cloudinaryHelper.js"
 
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
 const getCookieOptions = () => {
@@ -171,11 +171,7 @@ export const login = async (req, res) => {
     if (!validPassword)
       return res.status(401).json({ message: "Sai email hoặc mật khẩu" });
 
-    const token = jwt.sign(
-      { id: user.rows[0].user_id },
-      process.env.JWT_SECRET,
-      { expiresIn: "1h" }
-    );
+    const token = generateToken(user.rows[0].user_id);
 
     res.cookie("token", token, getCookieOptions());
     const { password_hash, ...userInfo } = user.rows[0];
