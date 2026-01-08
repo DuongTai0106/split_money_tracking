@@ -141,9 +141,19 @@ const Home = ({ user }) => {
   };
 
   // --- QR HANDLERS ---
-  const handleScanSuccess = async (code) => {
+  const handleScanSuccess = async (rawCode) => {
+    // Nếu là URL (vd: https://.../join/CODE), cắt lấy CODE
+    // Nếu là mã code thường, giữ nguyên
+    let code = rawCode;
+    if (rawCode.includes("/join/")) {
+        const parts = rawCode.split("/join/");
+        if (parts.length === 2) {
+            code = parts[1];
+        }
+    }
+
     // Gọi API preview
-    const loadingToast = toast.loading("Đang tìm nhóm...");
+    const loadingToast = toast.loading(`Đang tìm nhóm: ${code}...`);
     setIsQRScannerOpen(false);
 
     try {

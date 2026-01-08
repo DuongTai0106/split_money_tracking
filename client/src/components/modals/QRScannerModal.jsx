@@ -85,7 +85,7 @@ const QRScannerModal = ({ isOpen, onClose, onScanSuccess }) => {
                   <video
                     ref={videoRef}
                     className="w-full h-full object-cover"
-                    style={{ transform: "scaleX(-1)" }} // Mirror effect for selfie cam mostly, check if needed
+                    style={{ transform: "none" }} // Fix inverted camera
                   />
                   {/* Overlay Frame */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

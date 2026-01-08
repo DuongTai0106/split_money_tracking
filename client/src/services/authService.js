@@ -152,7 +152,7 @@ const authService = {
 
   changePassword: async (currentPassword, newPassword) => {
     try {
-      const res = await fetch(`${API_URL}/users/change-password`, {
+      const res = await fetch(`${API_URL}/auth/change-password`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
