@@ -71,14 +71,20 @@ const groupService = {
 
   createBill: async (payload) => {
     try {
+      // Kiểm tra nếu payload là FormData (có ảnh) hay JSON thường
+      const isFormData = payload instanceof FormData;
+
+      const headers = {};
+      // Nếu là JSON thì thêm header, nếu là FormData thì ĐỂ TRỐNG (browser tự thêm boundary)
+      if (!isFormData) {
+        headers["Content-Type"] = "application/json";
+      }
+
       const res = await fetch(`${API_URL}/groups/bills/create`, {
-        // Đảm bảo đúng route backend
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: headers,
         credentials: "include",
-        body: JSON.stringify(payload),
+        body: isFormData ? payload : JSON.stringify(payload),
       });
       const data = await res.json();
       return { ok: res.ok, data };
@@ -86,6 +92,7 @@ const groupService = {
       return { ok: false, data: { message: "Lỗi kết nối" } };
     }
   },
+
   getGroupSettings: async (groupId) => {
     try {
       const res = await fetch(`${API_URL}/groups/${groupId}/settings`, {

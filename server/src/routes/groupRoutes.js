@@ -29,7 +29,12 @@ router.post(
 );
 router.get("/my-groups", verifyToken, getMyGroups);
 router.get("/:id", verifyToken, getGroupDetails);
-router.post("/bills/create", verifyToken, createBill);
+router.post(
+  "/bills/create",
+  verifyToken,
+  upload.single("billImage"),
+  createBill
+);
 router.post("/settle", verifyToken, settleDebt);
 router.get("/:id/settings", verifyToken, getGroupSettings);
 router.put("/:id", verifyToken, upload.single("groupImage"), updateGroup);

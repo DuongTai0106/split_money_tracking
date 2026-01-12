@@ -8,6 +8,8 @@ import {
   Check,
   Loader2,
   ChevronDown,
+  Camera,
+  Image as ImageIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import groupService from "../../services/groupService";
@@ -58,6 +60,11 @@ const CreateExpenseModal = ({
   const [selectedMembers, setSelectedMembers] = useState([]); // For Equal Mode
   const [customAmounts, setCustomAmounts] = useState({}); // For Amount Mode: { userId: amount }
 
+  // State Upload ảnh
+  const [billImage, setBillImage] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const fileInputRef = useRef(null);
+
   // Reset form & Set Default
   useEffect(() => {
     if (isOpen) {
@@ -67,6 +74,8 @@ const CreateExpenseModal = ({
       setSplitMethod("equal");
       setIsPayerDropdownOpen(false);
       setCustomAmounts({});
+      setBillImage(null);
+      setPreviewUrl(null);
 
       // Mặc định chọn tất cả member
       if (members.length > 0) {
@@ -127,16 +136,21 @@ const CreateExpenseModal = ({
   const handleMethodChange = (method) => {
     setSplitMethod(method);
     if (method === "amount") {
-      // Pre-fill if needed, or keeping empty (here we set 0 to force user input)
-      // Or smart fill: Distribute equally as starting point
       const initialAmounts = {};
       members.forEach((m) => {
         initialAmounts[m.id] = 0;
       });
       setCustomAmounts(initialAmounts);
     } else {
-        // Reset to all selected when going back to equal
-        setSelectedMembers(members.map(m=>m.id));
+      setSelectedMembers(members.map((m) => m.id));
+    }
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setBillImage(file);
+      setPreviewUrl(URL.createObjectURL(file));
     }
   };
 
@@ -168,51 +182,61 @@ const CreateExpenseModal = ({
     let splitDetails = [];
 
     if (splitMethod === "equal") {
-        if (selectedMembers.length === 0) return toast.error("Chọn ít nhất 1 người!");
-        
-        splitDetails = selectedMembers.map(uid => ({
-            user_id: uid,
-            amount: perPersonAmount
-        }));
-        // Fix rounding error
-        const totalSplit = perPersonAmount * selectedMembers.length;
-        const remainder = rawAmount - totalSplit;
-        if (remainder > 0 && splitDetails.length > 0) {
-            splitDetails[0].amount += remainder;
-        }
+      if (selectedMembers.length === 0)
+        return toast.error("Chọn ít nhất 1 người!");
 
+      splitDetails = selectedMembers.map((uid) => ({
+        user_id: uid,
+        amount: perPersonAmount,
+      }));
+      // Fix rounding error
+      const totalSplit = perPersonAmount * selectedMembers.length;
+      const remainder = rawAmount - totalSplit;
+      if (remainder > 0 && splitDetails.length > 0) {
+        splitDetails[0].amount += remainder;
+      }
     } else {
-        // Amount Mode
-        if (remainingAmount !== 0) return toast.error("Tổng chia chưa khớp với hóa đơn!");
-        
-        splitDetails = Object.entries(customAmounts)
-            .filter(([_, val]) => val > 0) // Only include users with > 0 amount
-            .map(([uid, val]) => ({
-                user_id: parseInt(uid), // Ensure ID is int if DB expects int
-                amount: val
-            }));
-            
-        if (splitDetails.length === 0) return toast.error("Vui lòng nhập số tiền cho thành viên!");
+      // Amount Mode
+      if (remainingAmount !== 0)
+        return toast.error("Tổng chia chưa khớp với hóa đơn!");
+
+      splitDetails = Object.entries(customAmounts)
+        .filter(([_, val]) => val > 0) // Only include users with > 0 amount
+        .map(([uid, val]) => ({
+          user_id: parseInt(uid), // Ensure ID is int if DB expects int
+          amount: val,
+        }));
+
+      if (splitDetails.length === 0)
+        return toast.error("Vui lòng nhập số tiền cho thành viên!");
     }
 
     setLoading(true);
-    const payload = {
-      groupId,
-      title: description,
-      amount: rawAmount,
-      category,
-      payer_id: payerId,
-      splitDetails,
-    };
+
+    // --- CHUẨN BỊ FORM DATA (Để gửi ảnh) ---
+    const formData = new FormData();
+    formData.append("groupId", groupId);
+    formData.append("title", description);
+    formData.append("amount", rawAmount);
+    formData.append("category", category);
+    formData.append("payer_id", payerId);
+
+    // Serialize mảng object thành string JSON để gửi qua FormData
+    formData.append("splitDetails", JSON.stringify(splitDetails));
+
+    if (billImage) {
+      formData.append("billImage", billImage);
+    }
 
     try {
-      const res = await groupService.createBill(payload);
-      if (res.data && res.data.success) {
+      const res = await groupService.createBill(formData);
+      if (res.ok && res.data.success) {
+        // Kiểm tra res.ok từ service
         toast.success("Đã thêm hóa đơn!");
         if (onSuccess) onSuccess();
         onClose();
       } else {
-        toast.error(res.data.message || "Lỗi khi lưu hóa đơn");
+        toast.error(res.data?.message || "Lỗi khi lưu hóa đơn");
       }
     } catch (error) {
       console.error(error);
@@ -317,6 +341,50 @@ const CreateExpenseModal = ({
                     ))}
                   </div>
 
+                  {/* IMAGE UPLOAD SECTION */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-gray-500 font-bold uppercase ml-1">
+                      Hình ảnh bill (Tùy chọn)
+                    </label>
+
+                    {!previewUrl ? (
+                      <div
+                        onClick={() => fileInputRef.current.click()}
+                        className="border-2 border-dashed border-[#2d4a3e] rounded-xl p-4 flex flex-col items-center justify-center text-gray-500 hover:border-[#34d399] hover:text-[#34d399] transition-all cursor-pointer bg-[#16261f]/50 h-32"
+                      >
+                        <Camera size={24} className="mb-2" />
+                        <span className="text-xs">Chạm để tải ảnh lên</span>
+                      </div>
+                    ) : (
+                      <div className="relative h-32 rounded-xl overflow-hidden border border-[#2d4a3e] group">
+                        <img
+                          src={previewUrl}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBillImage(null);
+                            setPreviewUrl(null);
+                            fileInputRef.current.value = "";
+                          }}
+                          className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-red-500 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleImageChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+                  </div>
+
                   {/* PAYER SELECTION */}
                   <div ref={payerDropdownRef} className="relative">
                     <div
@@ -334,8 +402,12 @@ const CreateExpenseModal = ({
                             Người thanh toán
                           </span>
                           <span className="text-white text-sm font-bold flex items-center gap-2">
-                            {currentPayer ? currentPayer.name : "Chọn người trả"}
-                            {currentPayer && currentPayer.id === currentUserId && " (Bạn)"}
+                            {currentPayer
+                              ? currentPayer.name
+                              : "Chọn người trả"}
+                            {currentPayer &&
+                              currentPayer.id === currentUserId &&
+                              " (Bạn)"}
                           </span>
                         </div>
                       </div>
@@ -385,7 +457,10 @@ const CreateExpenseModal = ({
                                 {member.id === currentUserId && "(Bạn)"}
                               </span>
                               {payerId === member.id && (
-                                <Check size={16} className="text-[#34d399] ml-auto" />
+                                <Check
+                                  size={16}
+                                  className="text-[#34d399] ml-auto"
+                                />
                               )}
                             </div>
                           ))}
@@ -400,63 +475,94 @@ const CreateExpenseModal = ({
                   {/* SPLIT TABS */}
                   <div className="flex bg-[#0b1411] p-1 rounded-xl border border-[#2d4a3e]">
                     <button
-                        onClick={() => handleMethodChange("equal")}
-                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                            splitMethod === "equal" ? "bg-[#34d399] text-[#0b1411]" : "text-gray-400 hover:text-white"
-                        }`}
+                      onClick={() => handleMethodChange("equal")}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                        splitMethod === "equal"
+                          ? "bg-[#34d399] text-[#0b1411]"
+                          : "text-gray-400 hover:text-white"
+                      }`}
                     >
-                        Chia đều
+                      Chia đều
                     </button>
                     <button
-                        onClick={() => handleMethodChange("amount")}
-                        className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                            splitMethod === "amount" ? "bg-[#34d399] text-[#0b1411]" : "text-gray-400 hover:text-white"
-                        }`}
+                      onClick={() => handleMethodChange("amount")}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
+                        splitMethod === "amount"
+                          ? "bg-[#34d399] text-[#0b1411]"
+                          : "text-gray-400 hover:text-white"
+                      }`}
                     >
-                        Theo số tiền
+                      Theo số tiền
                     </button>
                   </div>
 
                   {splitMethod === "equal" ? (
                     // --- EQUAL MODE UI ---
                     <>
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-white font-bold text-lg">Chia cho ai?</h3>
-                            <button onClick={toggleSelectAll} className="text-[#34d399] text-sm font-bold hover:underline">
-                                {selectedMembers.length === members.length ? "Bỏ chọn tất cả" : "Chọn tất cả"}
-                            </button>
-                        </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-white font-bold text-lg">
+                          Chia cho ai?
+                        </h3>
+                        <button
+                          onClick={toggleSelectAll}
+                          className="text-[#34d399] text-sm font-bold hover:underline"
+                        >
+                          {selectedMembers.length === members.length
+                            ? "Bỏ chọn tất cả"
+                            : "Chọn tất cả"}
+                        </button>
+                      </div>
 
-                         <div className="flex items-center justify-between bg-[#1c2e26] px-4 py-3 rounded-xl border border-[#2d4a3e]">
-                            <div className="flex items-center gap-2 text-gray-400 text-xs">
-                              <span className="bg-gray-700 px-1.5 py-0.5 rounded text-white font-mono">
-                                ÷ {selectedMembers.length}
-                              </span>
-                              người hưởng thụ
-                            </div>
-                            <span className="text-white font-bold font-mono">
-                              {perPersonAmount.toLocaleString("vi-VN")}đ / người
-                            </span>
-                          </div>
+                      <div className="flex items-center justify-between bg-[#1c2e26] px-4 py-3 rounded-xl border border-[#2d4a3e]">
+                        <div className="flex items-center gap-2 text-gray-400 text-xs">
+                          <span className="bg-gray-700 px-1.5 py-0.5 rounded text-white font-mono">
+                            ÷ {selectedMembers.length}
+                          </span>
+                          người hưởng thụ
+                        </div>
+                        <span className="text-white font-bold font-mono">
+                          {perPersonAmount.toLocaleString("vi-VN")}đ / người
+                        </span>
+                      </div>
                     </>
                   ) : (
                     // --- AMOUNT MODE UI ---
                     <>
-                        <div className="flex flex-col gap-1 mb-2">
-                             <div className="flex justify-between items-center text-sm">
-                                <span className="text-gray-400">Đã nhập: <span className="text-white font-bold">{currentTotalCustom.toLocaleString()}đ</span></span>
-                                <span className={remainingAmount === 0 ? "text-[#34d399] font-bold" : "text-red-400 font-bold"}>
-                                    Còn lại: {remainingAmount.toLocaleString()}đ
-                                </span>
-                             </div>
-                             <div className="w-full h-1.5 bg-[#0b1411] rounded-full overflow-hidden">
-                                <motion.div 
-                                    className={`h-full ${remainingAmount === 0 ? "bg-[#34d399]" : "bg-red-500"}`}
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${Math.min((currentTotalCustom / (rawAmount || 1)) * 100, 100)}%` }}
-                                />
-                             </div>
+                      <div className="flex flex-col gap-1 mb-2">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-gray-400">
+                            Đã nhập:{" "}
+                            <span className="text-white font-bold">
+                              {currentTotalCustom.toLocaleString()}đ
+                            </span>
+                          </span>
+                          <span
+                            className={
+                              remainingAmount === 0
+                                ? "text-[#34d399] font-bold"
+                                : "text-red-400 font-bold"
+                            }
+                          >
+                            Còn lại: {remainingAmount.toLocaleString()}đ
+                          </span>
                         </div>
+                        <div className="w-full h-1.5 bg-[#0b1411] rounded-full overflow-hidden">
+                          <motion.div
+                            className={`h-full ${
+                              remainingAmount === 0
+                                ? "bg-[#34d399]"
+                                : "bg-red-500"
+                            }`}
+                            initial={{ width: 0 }}
+                            animate={{
+                              width: `${Math.min(
+                                (currentTotalCustom / (rawAmount || 1)) * 100,
+                                100
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
                     </>
                   )}
 
@@ -464,65 +570,113 @@ const CreateExpenseModal = ({
                   <div className="space-y-3 mt-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                     {members.map((member) => {
                       const isSelected = selectedMembers.includes(member.id);
-                      
+
                       if (splitMethod === "equal") {
-                          // RENDER EQUAL ITEM
-                          return (
+                        // RENDER EQUAL ITEM
+                        return (
+                          <div
+                            key={member.id}
+                            onClick={() => toggleMember(member.id)}
+                            className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
+                              isSelected
+                                ? "bg-[#16261f] border-[#34d399]/30"
+                                : "bg-[#0b1411] border-[#1c2e26] opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={
+                                  member.avatar ||
+                                  `https://ui-avatars.com/api/?name=${member.name}&background=random`
+                                }
+                                alt={member.name}
+                                className={`w-10 h-10 rounded-full border-2 ${
+                                  isSelected
+                                    ? "border-[#34d399]"
+                                    : "border-gray-600"
+                                }`}
+                              />
+                              <div>
+                                <p
+                                  className={`font-bold text-sm ${
+                                    isSelected ? "text-white" : "text-gray-400"
+                                  }`}
+                                >
+                                  {member.name}
+                                </p>
+                                {isSelected && (
+                                  <p className="text-xs text-gray-500">
+                                    {payerId === member.id ? (
+                                      <span className="text-[#34d399]">
+                                        Đã trả {amount}đ
+                                      </span>
+                                    ) : (
+                                      <span>
+                                        Nợ{" "}
+                                        {currentPayer?.name?.split(" ").pop()}:{" "}
+                                        {perPersonAmount.toLocaleString(
+                                          "vi-VN"
+                                        )}
+                                        đ
+                                      </span>
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
                             <div
-                              key={member.id}
-                              onClick={() => toggleMember(member.id)}
-                              className={`flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all ${
-                                isSelected
-                                  ? "bg-[#16261f] border-[#34d399]/30"
-                                  : "bg-[#0b1411] border-[#1c2e26] opacity-60"
+                              className={`w-12 h-7 rounded-full flex items-center p-1 transition-colors duration-300 ${
+                                isSelected ? "bg-[#34d399]" : "bg-gray-600"
                               }`}
                             >
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={member.avatar || `https://ui-avatars.com/api/?name=${member.name}&background=random`}
-                                  alt={member.name}
-                                  className={`w-10 h-10 rounded-full border-2 ${isSelected ? "border-[#34d399]" : "border-gray-600"}`}
-                                />
-                                <div>
-                                  <p className={`font-bold text-sm ${isSelected ? "text-white" : "text-gray-400"}`}>{member.name}</p>
-                                  {isSelected && (
-                                    <p className="text-xs text-gray-500">
-                                      {payerId === member.id ? <span className="text-[#34d399]">Đã trả {amount}đ</span> : <span>Nợ {currentPayer?.name?.split(" ").pop()}: {perPersonAmount.toLocaleString("vi-VN")}đ</span>}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className={`w-12 h-7 rounded-full flex items-center p-1 transition-colors duration-300 ${isSelected ? "bg-[#34d399]" : "bg-gray-600"}`}>
-                                <motion.div layout className="w-5 h-5 bg-white rounded-full shadow-md" style={{ marginLeft: isSelected ? "auto" : "0" }} />
-                              </div>
+                              <motion.div
+                                layout
+                                className="w-5 h-5 bg-white rounded-full shadow-md"
+                                style={{
+                                  marginLeft: isSelected ? "auto" : "0",
+                                }}
+                              />
                             </div>
-                          );
+                          </div>
+                        );
                       } else {
-                          // RENDER AMOUNT INPUT ITEM
-                          return (
-                            <div
-                                key={member.id}
-                                className="flex items-center justify-between p-3 rounded-2xl border border-[#2d4a3e] bg-[#16261f]"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <img
-                                      src={member.avatar || `https://ui-avatars.com/api/?name=${member.name}&background=random`}
-                                      alt={member.name}
-                                      className="w-10 h-10 rounded-full border border-gray-600"
-                                    />
-                                    <p className="font-bold text-sm text-white">{member.name}</p>
-                                </div>
-                                <div className="relative w-32">
-                                    <input 
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={formatCurrency(customAmounts[member.id] || 0)}
-                                        onChange={(e) => handleCustomAmountChange(member.id, e.target.value)}
-                                        className="w-full bg-[#0b1411] border border-[#2d4a3e] rounded-lg px-3 py-1.5 text-right text-white font-mono focus:border-[#34d399] focus:outline-none"
-                                    />
-                                </div>
+                        // RENDER AMOUNT INPUT ITEM
+                        return (
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between p-3 rounded-2xl border border-[#2d4a3e] bg-[#16261f]"
+                          >
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={
+                                  member.avatar ||
+                                  `https://ui-avatars.com/api/?name=${member.name}&background=random`
+                                }
+                                alt={member.name}
+                                className="w-10 h-10 rounded-full border border-gray-600"
+                              />
+                              <p className="font-bold text-sm text-white">
+                                {member.name}
+                              </p>
                             </div>
-                          );
+                            <div className="relative w-32">
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={formatCurrency(
+                                  customAmounts[member.id] || 0
+                                )}
+                                onChange={(e) =>
+                                  handleCustomAmountChange(
+                                    member.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="w-full bg-[#0b1411] border border-[#2d4a3e] rounded-lg px-3 py-1.5 text-right text-white font-mono focus:border-[#34d399] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        );
                       }
                     })}
                   </div>

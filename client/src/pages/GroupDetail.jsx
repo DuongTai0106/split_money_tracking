@@ -12,6 +12,7 @@ import ExpenseList from "../components/group-detail/ExpenseList";
 import CreateExpenseModal from "../components/modals/CreateExpenseModal";
 import groupService from "../services/groupService";
 import DebtDetailsModal from "../components/modals/DebtDetailsModal";
+import BillDetailModal from "../components/modals/BillDetailModal";
 import { io } from "socket.io-client";
 
 const GroupDetail = ({ user }) => {
@@ -26,6 +27,7 @@ const GroupDetail = ({ user }) => {
   const [groupData, setGroupData] = useState(null);
   const [balanceData, setBalanceData] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [selectedBill, setSelectedBill] = useState(null);
 
   // Hàm fetch dữ liệu
   const fetchGroupDetails = async () => {
@@ -47,14 +49,12 @@ const GroupDetail = ({ user }) => {
     }
   };
 
-
-
   useEffect(() => {
     fetchGroupDetails();
 
     // Socket.IO Setup
     const newSocket = io(import.meta.env.VITE_API_URL, {
-        withCredentials: true,
+      withCredentials: true,
     });
 
     newSocket.on("connect", () => {
@@ -85,6 +85,10 @@ const GroupDetail = ({ user }) => {
   // Nếu không có data (lỗi)
   if (!groupData) return null;
 
+  const handleTransactionClick = (transaction) => {
+    // transaction object cần có image_url lấy từ API
+    setSelectedBill(transaction);
+  };
   return (
     <div className="min-h-screen bg-[#0b1411] text-white font-sans pb-24 lg:pb-0">
       {/* HEADER NAVIGATION */}
@@ -95,7 +99,7 @@ const GroupDetail = ({ user }) => {
         >
           <ArrowLeft size={22} className="text-gray-300" />
         </button>
-                <h1 className="text-lg font-bold">Thông tin nhóm</h1>
+        <h1 className="text-lg font-bold">Thông tin nhóm</h1>
 
         <button
           onClick={() => navigate(`/groups/${id}/settings`)}
@@ -128,7 +132,10 @@ const GroupDetail = ({ user }) => {
               {activeTab === "Chi tiêu" && (
                 <>
                   {transactions.length > 0 ? (
-                    <ExpenseList transactions={transactions} />
+                    <ExpenseList
+                      transactions={transactions}
+                      onTransactionClick={handleTransactionClick}
+                    />
                   ) : (
                     <div className="text-center text-gray-500 py-10 italic">
                       Chưa có chi tiêu nào. Hãy thêm mới!
@@ -190,6 +197,11 @@ const GroupDetail = ({ user }) => {
           }}
         />
       )}
+      <BillDetailModal
+        isOpen={!!selectedBill}
+        onClose={() => setSelectedBill(null)}
+        bill={selectedBill}
+      />
     </div>
   );
 };

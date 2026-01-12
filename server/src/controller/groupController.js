@@ -167,7 +167,7 @@ export const getGroupDetails = async (req, res) => {
     // SỬA: Thay b.payer_id = u.id -> b.payer_id = u.user_id
     const billsQuery = `
             SELECT 
-                b.id, b.title, b.amount, b.category, b.created_at, b.payer_id,
+                b.id, b.title, b.amount, b.category, b.image_url, b.created_at, b.payer_id,
                 u.username as payer_name, -- Lấy username thay vì full_name
                 (
                     SELECT json_agg(json_build_object('user_id', bd.user_id, 'amount', bd.amount))
@@ -255,12 +255,13 @@ export const getGroupDetails = async (req, res) => {
       groupedTransactions[dateKey].push({
         id: bill.id,
         title: bill.title,
-        payer: bill.payer_name,
-        amount: `${parseFloat(bill.amount).toLocaleString()}đ`,
-        shareAmount: shareAmountText,
+        amount: parseFloat(bill.amount).toLocaleString("vi-VN") + "đ",
+        payer: isLender ? "Bạn" : bill.payer_name,
         category: bill.category,
-        isLender: isLender,
         timestamp: bill.created_at,
+        isLender: isLender,
+        amountText: shareAmountText, // Restore shareAmountText just in case
+        image_url: bill.image_url,
       });
     });
 
@@ -296,170 +297,32 @@ export const getGroupDetails = async (req, res) => {
   }
 };
 
-// export const createBill = async (req, res) => {
-//   const client = await pool.connect();
-
-//   try {
-//     const { groupId, title, amount, category, splitDetails } = req.body;
-//     // splitDetails là mảng: [{ user_id: 1, amount: 50000 }, { user_id: 2, amount: 50000 }]
-//     const payerId = req.user.user_id || req.user.id; // Người tạo bill là người trả tiền (mặc định)
-
-//     // Validate cơ bản
-//     if (!groupId || !amount || !title) {
-//       return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
-//     }
-
-//     await client.query("BEGIN"); // Bắt đầu transaction
-
-//     // 1. Tạo Bill
-//     const billQuery = `
-//       INSERT INTO bills (group_id, payer_id, title, amount, category, created_at)
-//       VALUES ($1, $2, $3, $4, $5, NOW())
-//       RETURNING id
-//     `;
-//     const billRes = await client.query(billQuery, [
-//       groupId,
-//       payerId,
-//       title,
-//       amount,
-//       category,
-//     ]);
-//     const billId = billRes.rows[0].id;
-
-//     // 2. Tạo Bill Details (Vòng lặp insert từng người)
-//     // Lưu ý: splitDetails phải được tính toán chuẩn từ Frontend gửi lên
-//     for (const detail of splitDetails) {
-//       const detailQuery = `
-//         INSERT INTO bill_details (bill_id, user_id, amount)
-//         VALUES ($1, $2, $3)
-//       `;
-//       await client.query(detailQuery, [billId, detail.user_id, detail.amount]);
-//     }
-
-//     await client.query("COMMIT"); // Lưu tất cả nếu không có lỗi
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Tạo hóa đơn thành công",
-//       billId: billId,
-//     });
-//   } catch (error) {
-//     await client.query("ROLLBACK"); // Hủy hết nếu có lỗi
-//     console.error("Create Bill Error:", error);
-//     res
-//       .status(500)
-//       .json({ message: "Lỗi server khi tạo hóa đơn", error: error.message });
-//   } finally {
-//     client.release();
-//   }
-// };
-
-// export const createBill = async (req, res) => {
-//   const client = await pool.connect();
-
-//   try {
-//     // 1. Lấy thêm payer_id từ frontend gửi lên
-//     const { groupId, title, amount, category, splitDetails, payer_id } =
-//       req.body;
-
-//     // Logic xác định người trả tiền:
-//     // - Nếu frontend gửi payer_id thì dùng nó.
-//     // - Nếu không (hoặc null), fallback về người đang login (req.user.id).
-//     const creatorId = req.user.user_id || req.user.id;
-//     const finalPayerId = payer_id || creatorId;
-
-//     // Validate cơ bản
-//     if (!groupId || !amount || !title) {
-//       return res.status(400).json({ message: "Thiếu thông tin bắt buộc" });
-//     }
-
-//     if (!splitDetails || splitDetails.length === 0) {
-//       return res.status(400).json({ message: "Danh sách chia tiền trống" });
-//     }
-
-//     await client.query("BEGIN"); // Bắt đầu transaction
-
-//     // ---------------------------------------------------------
-//     // BƯỚC 1: Tạo Bill (Hóa đơn tổng)
-//     // Lưu ý: payer_id ở đây là người thực sự bỏ tiền ra
-//     // ---------------------------------------------------------
-//     const billQuery = `
-//       INSERT INTO bills (group_id, payer_id, title, amount, category, created_by, created_at)
-//       VALUES ($1, $2, $3, $4, $5, $6, NOW())
-//       RETURNING id
-//     `;
-//     const billRes = await client.query(billQuery, [
-//       groupId,
-//       finalPayerId, // Người trả tiền (được chọn từ dropdown)
-//       title,
-//       amount,
-//       category,
-//       creatorId, // Người tạo đơn (để log lịch sử ai là người nhập liệu)
-//     ]);
-//     const billId = billRes.rows[0].id;
-
-//     // ---------------------------------------------------------
-//     // BƯỚC 2: Xử lý chi tiết & Tạo Nợ (Core Logic)
-//     // ---------------------------------------------------------
-//     for (const detail of splitDetails) {
-//       // 2.1. Lưu vào bill_details (Để biết ai tham gia vào bill này)
-//       const detailQuery = `
-//         INSERT INTO bill_details (bill_id, user_id, amount)
-//         VALUES ($1, $2, $3)
-//       `;
-//       await client.query(detailQuery, [billId, detail.user_id, detail.amount]);
-
-//       // 2.2. TẠO GHI CHÚ NỢ (QUAN TRỌNG)
-//       // Logic: Nếu người tham gia (detail.user_id) KHÁC người trả tiền (finalPayerId)
-//       // => Người tham gia đang NỢ người trả tiền.
-//       if (String(detail.user_id) !== String(finalPayerId)) {
-//         const debtQuery = `
-//           INSERT INTO debts (group_id, creditor_id, debtor_id, amount, bill_id, status)
-//           VALUES ($1, $2, $3, $4, $5, 'unpaid')
-//         `;
-//         // creditor_id: Chủ nợ (Người trả tiền)
-//         // debtor_id: Con nợ (Người hưởng thụ)
-//         await client.query(debtQuery, [
-//           groupId,
-//           finalPayerId,
-//           detail.user_id,
-//           detail.amount,
-//           billId,
-//         ]);
-//       }
-//     }
-
-//     await client.query("COMMIT"); // Lưu tất cả
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Tạo hóa đơn thành công",
-//       billId: billId,
-//     });
-//   } catch (error) {
-//     await client.query("ROLLBACK"); // Hủy hết nếu có lỗi
-//     console.error("Create Bill Error:", error);
-//     res.status(500).json({
-//       message: "Lỗi server khi tạo hóa đơn",
-//       error: error.message,
-//     });
-//   } finally {
-//     client.release();
-//   }
-// };
-
 export const createBill = async (req, res) => {
   const client = await pool.connect();
 
   try {
     // Lấy dữ liệu từ Frontend
-    const { groupId, title, amount, category, splitDetails, payer_id } =
-      req.body;
+    const { groupId, title, amount, category, payer_id } = req.body;
+
+    let splitDetails = [];
+
+    try {
+      splitDetails = JSON.parse(req.body.splitDetails || "[]");
+    } catch (e) {
+      return res
+        .status(400)
+        .json({ message: "Dữ liệu chia tiền không hợp lệ" });
+    }
 
     // 1. Xác định người trả tiền (Payer)
     // Nếu frontend không gửi payer_id, mặc định lấy người đang login (req.user.user_id)
     const currentUserId = req.user.user_id || req.user.id;
     const finalPayerId = payer_id || currentUserId;
+
+    let billImageUrl = null;
+    if (req.file) {
+      billImageUrl = req.file.path; // Cloudinary tự trả về URL sau khi upload qua middleware
+    }
 
     // Validate
     if (!groupId || !amount || !title) {
@@ -486,16 +349,17 @@ export const createBill = async (req, res) => {
     // BƯỚC 1: Insert vào bảng 'bills'
     // ---------------------------------------------------------
     const billQuery = `
-      INSERT INTO bills (group_id, payer_id, title, amount, category)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO bills (group_id, payer_id, title, amount, category, image_url, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
       RETURNING id
     `;
     const billRes = await client.query(billQuery, [
       groupId,
-      finalPayerId, // Người trả tiền thực tế
+      finalPayerId,
       title,
       amount,
       category || "general",
+      billImageUrl, // <--- Lưu URL ảnh
     ]);
     const billId = billRes.rows[0].id;
 
@@ -548,9 +412,13 @@ export const createBill = async (req, res) => {
       success: true,
       message: "Tạo hóa đơn thành công",
       billId: billId,
+      image_url: billImageUrl,
     });
   } catch (error) {
     await client.query("ROLLBACK"); // --- CÓ LỖI, HỦY HẾT ---
+    if (req.file && req.file.filename) {
+      cloudinary.uploader.destroy(req.file.filename);
+    }
     console.error("Create Bill Error:", error);
     res.status(500).json({
       message: "Lỗi server khi tạo hóa đơn",
