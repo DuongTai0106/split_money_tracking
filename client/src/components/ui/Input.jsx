@@ -1,7 +1,19 @@
 import React from "react";
 import { motion } from "framer-motion";
 
-const Input = ({ icon: Icon, label, error, ...props }) => {
+import { Eye, EyeOff } from "lucide-react";
+import { useState } from "react";
+
+const Input = ({ icon: Icon, label, error, type = "text", ...props }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === "password";
+
+  const handleTogglePassword = () => {
+    setShowPassword(!showPassword);
+  };
+
+  const inputType = isPassword ? (showPassword ? "text" : "password") : type;
+
   return (
     <div className="space-y-2">
       {label && (
@@ -19,8 +31,9 @@ const Input = ({ icon: Icon, label, error, ...props }) => {
 
         <motion.input
           whileFocus={{ scale: 1.01 }}
+          type={inputType}
           className={`
-            block w-full pl-10 pr-3 py-3 
+            block w-full pl-10 pr-10 py-3 
             rounded-xl leading-5 sm:text-sm shadow-sm
             bg-[#1c2e26] 
             text-white placeholder-gray-500
@@ -34,6 +47,17 @@ const Input = ({ icon: Icon, label, error, ...props }) => {
           `}
           {...props}
         />
+
+        {/* Toggle Password Icon (Right Side) */}
+        {isPassword && (
+          <button
+            type="button"
+            onClick={handleTogglePassword}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-500 hover:text-[#34d399] focus:outline-none transition-colors"
+          >
+            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+        )}
       </div>
       {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
     </div>
